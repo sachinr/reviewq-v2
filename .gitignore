@@ -1,0 +1,9 @@
+node_modules
+.env
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Ignore built ts files
+dist/**/*

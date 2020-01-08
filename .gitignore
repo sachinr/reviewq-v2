@@ -7,3 +7,9 @@ Thumbs.db
 
 # Ignore built ts files
 dist/**/*
+
+tmp/
+temp
+.vscode/
+
+ormconfig.json

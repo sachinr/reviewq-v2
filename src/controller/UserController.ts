@@ -7,7 +7,9 @@ export class UserController {
     private userRepository = getRepository(User);
 
     public async all(request: Request, response: Response, next: NextFunction) {
-        return this.userRepository.find();
+        // tslint:disable-next-line: no-console
+        const users = await this.userRepository.find();
+        response.send(users);
     }
 
     public async one(request: Request, response: Response, next: NextFunction) {

@@ -1,4 +1,4 @@
-import Item from "../entity/item";
+import {Item} from "../entity/Item";
 
 test("basic", () => {
   const item: Item = new Item(1234, 1234, "1234.1234", "this is a test message");

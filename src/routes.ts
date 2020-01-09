@@ -1,6 +1,12 @@
+import {IndexController} from "./controller/IndexController";
 import {UserController} from "./controller/UserController";
 
 export const Routes = [{
+    action: "index",
+    controller: IndexController,
+    method: "get",
+    route: "/",
+}, {
     action: "all",
     controller: UserController,
     method: "get",

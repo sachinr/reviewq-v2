@@ -1,29 +1,29 @@
-import {IndexController} from "./controller/IndexController";
-import {UserController} from "./controller/UserController";
+import { IndexController } from "./controller/IndexController";
+import { UserController } from "./controller/UserController";
 
 export const Routes = [{
-    action: "index",
-    controller: IndexController,
-    method: "get",
-    route: "/",
+  action: "index",
+  controller: IndexController,
+  method: "get",
+  route: "/",
 }, {
-    action: "all",
-    controller: UserController,
-    method: "get",
-    route: "/users",
+  action: "all",
+  controller: UserController,
+  method: "get",
+  route: "/users",
 }, {
-    action: "one",
-    controller: UserController,
-    method: "get",
-    route: "/users/:id",
+  action: "one",
+  controller: UserController,
+  method: "get",
+  route: "/users/:id",
 }, {
-    action: "save",
-    controller: UserController,
-    method: "post",
-    route: "/users",
+  action: "save",
+  controller: UserController,
+  method: "post",
+  route: "/users",
 }, {
-    action: "remove",
-    controller: UserController,
-    method: "delete",
-    route: "/users/:id",
+  action: "remove",
+  controller: UserController,
+  method: "delete",
+  route: "/users/:id",
 }];

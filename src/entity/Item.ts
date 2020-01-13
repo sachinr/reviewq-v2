@@ -1,54 +1,58 @@
-import {Column, Entity, PrimaryGeneratedColumn} from "typeorm";
+import {Column, Entity, ManyToOne, PrimaryGeneratedColumn} from "typeorm";
+import {User} from "./User";
 
 @Entity()
 export class Item {
-    @PrimaryGeneratedColumn()
-    public id: number;
+  @PrimaryGeneratedColumn()
+  public id: number;
 
-    @Column()
-    public channelId: number;
+  @Column({ nullable: true })
+  public channelId: number;
 
-    @Column()
-    public userId: number;
+  @Column()
+  public userId: number;
 
-    @Column()
-    public ts: string;
+  @Column()
+  public ts: string;
 
-    @Column()
-    public message: string;
+  @Column({ nullable: true })
+  public message: string;
 
-    @Column()
-    public archiveLink: string;
+  @Column()
+  public archiveLink: string;
 
-    @Column({ default: false })
-    public complete: boolean;
+  @Column({ default: false })
+  public complete: boolean;
 
-    @Column()
-    public dateCompleted: number;
+  @Column({ nullable: true })
+  public dateCompleted: number;
 
-    @Column()
-    public completedBy: string;
+  @Column({ nullable: true })
+  public completedBy: string;
 
-    @Column({ default: false })
-    public vague: boolean;
+  @Column({ default: false })
+  public vague: boolean;
 
-    constructor(channelId: number, userId: number, ts: string, message: string) {
-        this.channelId = channelId,
-        this.userId = userId,
-        this.ts = ts,
-        this.message = message;
+  @ManyToOne((type) => User, (user) => user.items)
+  public user: User;
 
-        this.archiveLink = this.buildArchiveLink();
+  constructor(channelId: number, userId: number, ts: string, message: string) {
+    this.channelId = channelId,
+      this.userId = userId,
+      this.ts = ts,
+      this.message = message;
+
+    this.archiveLink = this.buildArchiveLink();
+  }
+
+  private buildArchiveLink(): string {
+    if (!this.archiveLink && this.ts) {
+      const domain: string = "peeeps";
+      const channelName: string = "general";
+
+      return `https://${domain}.slack.com/archives/${channelName}/p${this.ts.replace(".", "")}`;
+    } else {
+      return this.archiveLink;
     }
-
-    private buildArchiveLink(): string {
-      if (!this.archiveLink && this.ts) {
-        const domain: string = "peeeps";
-        const channelName: string = "general";
-
-        return `https://${domain}.slack.com/archives/${channelName}/p${this.ts.replace(".", "")}`;
-      } else {
-        return this.archiveLink;
-      }
-    }
+  }
 }

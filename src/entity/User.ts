@@ -1,18 +1,47 @@
-import {Column, Entity, PrimaryGeneratedColumn} from "typeorm";
+import {Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn} from "typeorm";
+
+import {Item} from "./Item";
+import {Team} from "./Team";
 
 @Entity()
 export class User {
 
-    @PrimaryGeneratedColumn()
-    public id: number;
+  @PrimaryGeneratedColumn()
+  public id: number;
 
-    @Column()
-    public firstName: string;
+  @Column({ nullable: true })
+  public teamId: number;
 
-    @Column()
-    public lastName: string;
+  @Column({ unique: true })
+  public slackId: string;
 
-    @Column()
-    public age: number;
+  @Column({ nullable: true })
+  public firstName: string;
+
+  @Column({ nullable: true })
+  public lastName: string;
+
+  @Column()
+  public slackUserName: string;
+
+  @Column({ nullable: true })
+  public token: string;
+
+  @Column({ nullable: true })
+  public avatar24: string;
+
+  @ManyToOne((type) => Team, (team) => team.users)
+  public team: Team;
+
+  @OneToMany((type) => Item, (item) => item.user)
+  public items: Item[];
+
+  public fullName(): string {
+    if (this.firstName) {
+      return `${this.firstName} ${this.lastName}`;
+    } else {
+      return this.slackUserName;
+    }
+  }
 
 }

@@ -15,14 +15,14 @@
     "reflect-metadata": "^0.1.13",
     "source-map-support": "^0.5.16",
     "typeorm": "^0.2.22",
-    "typescript": "^3.7.4"
+    "typescript": "^3.7.4",
+    "tslint": "^5.20.1"
   },
   "devDependencies": {
     "jest": "^24.9.0",
     "nodemon": "^2.0.2",
     "sqlite3": "^4.1.1",
-    "ts-jest": "^24.3.0",
-    "tslint": "^5.20.1"
+    "ts-jest": "^24.3.0"
   },
   "nodemonConfig": {
     "ignore": [

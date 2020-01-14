@@ -1,4 +1,5 @@
 import {createConnection, getConnection, getRepository} from "typeorm";
+import {Channel} from "../entity/Channel";
 import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
@@ -7,7 +8,7 @@ beforeEach(() => {
   return createConnection({
     database: ":memory:",
     dropSchema: true,
-    entities: [User, Team, Item],
+    entities: [User, Team, Item, Channel],
     logging: false,
     synchronize: true,
     type: "sqlite",

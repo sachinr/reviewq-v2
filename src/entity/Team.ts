@@ -1,4 +1,5 @@
 import {BaseEntity, Column, Entity, OneToMany, PrimaryGeneratedColumn} from "typeorm";
+import {Channel} from "./Channel";
 import {User} from "./User";
 
 @Entity()
@@ -21,4 +22,7 @@ export class Team extends BaseEntity {
 
   @OneToMany((type) => User, (user) => user.team)
   public users: User[];
+
+  @OneToMany((type) => Channel, (channel) => channel.team)
+  public channels: Channel[];
 }

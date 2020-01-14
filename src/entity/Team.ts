@@ -11,8 +11,14 @@ export class Team extends BaseEntity {
   @Column()
   public name: string;
 
-  @Column({ nullable: true })
+  @Column()
   public slackId: string;
+
+  @Column({ nullable: true })
+  public slackEnterpriseId: string;
+
+  @Column()
+  public scope: string;
 
   @Column({ unique: true })
   public botSlackId: string;

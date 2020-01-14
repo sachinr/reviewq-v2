@@ -1,4 +1,7 @@
 import {createConnection, getConnection, getRepository} from "typeorm";
+
+import {setupTeam, setupUser} from "./helpers";
+
 import {Channel} from "../entity/Channel";
 import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
@@ -19,29 +22,6 @@ afterEach(() => {
   const conn = getConnection();
   return conn.close();
 });
-
-const setupTeam = async () => {
-  const team = new Team();
-  team.name = "LLL";
-  team.botSlackId = "B1234";
-  team.botToken = "xoxb-1234-1234";
-  await getRepository(Team).save(team);
-
-  return team;
-};
-
-const setupUser = async (team: Team) => {
-  const user = new User();
-  user.firstName = "Joe";
-  user.lastName = "Shmoe";
-  user.team = team;
-  user.slackId = "U1234";
-  user.slackUserName = "joeshmoe";
-
-  await getRepository(User).save(user);
-
-  return user;
-};
 
 test("store team and fetch it", async () => {
   const team = await setupTeam();

@@ -21,11 +21,8 @@ export class User extends BaseEntity {
   @Column({ nullable: true })
   public lastName: string;
 
-  @Column()
-  public slackUserName: string;
-
   @Column({ nullable: true })
-  public token: string;
+  public slackUserName: string;
 
   @Column({ nullable: true })
   public avatar24: string;

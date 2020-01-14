@@ -1,4 +1,5 @@
 import { IndexController } from "./controller/IndexController";
+import { OAuthController } from "./controller/OAuthController";
 import { UserController } from "./controller/UserController";
 
 export const Routes = [{
@@ -6,6 +7,11 @@ export const Routes = [{
   controller: IndexController,
   method: "get",
   route: "/",
+}, {
+  action: "oauth",
+  controller: OAuthController,
+  method: "get",
+  route: "/oauth",
 }, {
   action: "all",
   controller: UserController,

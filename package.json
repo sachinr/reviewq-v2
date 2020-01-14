@@ -4,19 +4,21 @@
   "description": "",
   "main": "dist/index.js",
   "dependencies": {
-    "@types/source-map-support": "^0.5.0",
+    "@slack/events-api": "^2.3.0",
+    "@slack/web-api": "^5.6.0",
     "@types/dotenv": "^8.2.0",
     "@types/express": "^4.17.2",
     "@types/jest": "^24.0.25",
     "@types/node": "^13.1.4",
+    "@types/source-map-support": "^0.5.0",
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "pg": "^7.17.0",
     "reflect-metadata": "^0.1.13",
     "source-map-support": "^0.5.16",
+    "tslint": "^5.20.1",
     "typeorm": "^0.2.22",
-    "typescript": "^3.7.4",
-    "tslint": "^5.20.1"
+    "typescript": "^3.7.4"
   },
   "devDependencies": {
     "jest": "^24.9.0",

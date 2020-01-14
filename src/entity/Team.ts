@@ -1,8 +1,8 @@
-import {Column, Entity, JoinTable, OneToMany, PrimaryGeneratedColumn} from "typeorm";
+import {BaseEntity, Column, Entity, OneToMany, PrimaryGeneratedColumn} from "typeorm";
 import {User} from "./User";
 
 @Entity()
-export class Team {
+export class Team extends BaseEntity {
 
   @PrimaryGeneratedColumn()
   public id: number;

@@ -1,8 +1,8 @@
-import {Column, Entity, ManyToOne, PrimaryGeneratedColumn} from "typeorm";
+import {BaseEntity, Column, Entity, ManyToOne, PrimaryGeneratedColumn} from "typeorm";
 import {User} from "./User";
 
 @Entity()
-export class Item {
+export class Item extends BaseEntity {
   @PrimaryGeneratedColumn()
   public id: number;
 
@@ -18,7 +18,7 @@ export class Item {
   @Column({ nullable: true })
   public message: string;
 
-  @Column()
+  @Column({ nullable: true })
   public archiveLink: string;
 
   @Column({ default: false })
@@ -36,23 +36,4 @@ export class Item {
   @ManyToOne((type) => User, (user) => user.items)
   public user: User;
 
-  constructor(channelId: number, userId: number, ts: string, message: string) {
-    this.channelId = channelId,
-      this.userId = userId,
-      this.ts = ts,
-      this.message = message;
-
-    this.archiveLink = this.buildArchiveLink();
-  }
-
-  private buildArchiveLink(): string {
-    if (!this.archiveLink && this.ts) {
-      const domain: string = "peeeps";
-      const channelName: string = "general";
-
-      return `https://${domain}.slack.com/archives/${channelName}/p${this.ts.replace(".", "")}`;
-    } else {
-      return this.archiveLink;
-    }
-  }
 }

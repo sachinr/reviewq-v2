@@ -20,7 +20,7 @@ export const setupUser = async (team: Team) => {
   user.lastName = "Shmoe";
   user.team = team;
   user.slackId = "U1234";
-  user.slackUserName = "joeshmoe";
+  user.displayName = "joeshmoe";
 
   await getRepository(User).save(user);
 

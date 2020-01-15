@@ -1,6 +1,7 @@
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { NextFunction, Request, Response } from "express";
 import { Team } from "../entity/Team";
+import { User } from "../entity/User";
 
 interface IOAuthV2AccessResult extends WebAPICallResult {
   app_id: string;
@@ -38,9 +39,19 @@ export class OAuthController {
           team.botSlackId = result.bot_user_id;
           team.botToken = result.access_token;
           await team.save();
-
-          return "App Installed!";
         }
+
+        let user = await User.findOne({slackId: result.authed_user.id});
+        if (!user) {
+          user = new User();
+          user.slackId = result.authed_user.id;
+          user.team = team;
+        }
+        user.installer = true;
+        await user.fetchProfile();
+        await user.save();
+
+        return "App Installed!";
       } else {
         return result.response_metadata;
       }

@@ -1,4 +1,4 @@
-import { BaseEntity, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { BaseEntity, Column, Entity, getRepository, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
 
 import { Item } from "./Item";
 import { Team } from "./Team";
@@ -21,4 +21,8 @@ export class Channel extends BaseEntity {
 
   @OneToMany((type) => Item, (item) => item.channel)
   public items: Item[];
+
+  public async openItems(): Promise<Item[]> {
+    return await Item.find({ where: {channelId: this.id, complete: false }});
+  }
 }

@@ -28,23 +28,23 @@ afterEach(() => {
 });
 
 test("hasExistingTeam() finds team", async () => {
-  const team = await setupTeam();
+  const team = await setupTeam().save();
   const event = new Event();
   event.team_id = "T1234";
   expect(await event.findTeam()).toStrictEqual(team);
 });
 
 test("hasExistingTeam() doesn't find team", async () => {
-  const team = await setupTeam();
+  const team = await setupTeam().save();
   const event = new Event();
   event.team_id = "chicken";
   expect(await event.findTeam()).toStrictEqual(undefined);
 });
 
 test("findOrCreateSlackObjects() finds channel and user", async () => {
-  const team = await setupTeam();
-  const user = await setupUser(team);
-  const channel = await setupChannel(team, false);
+  const team = await setupTeam().save();
+  const user = await setupUser(team).save();
+  const channel = await setupChannel(team, false).save();
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
@@ -63,7 +63,7 @@ test("findOrCreateSlackObjects() finds channel and user", async () => {
 });
 
 test("findOrCreateSlackObjects() creates channel and user", async () => {
-  const team = await setupTeam();
+  const team = await setupTeam().save();
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
@@ -82,9 +82,9 @@ test("findOrCreateSlackObjects() creates channel and user", async () => {
 
 test("processes message events", async () => {
   const spy = jest.spyOn(Item, "createFromEvent");
-  const team = await setupTeam();
-  const user = await setupUser(team);
-  const channel = await setupChannel(team, true);
+  const team = await setupTeam().save();
+  const user = await setupUser(team).save();
+  const channel = await setupChannel(team, true).save();
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
@@ -101,9 +101,9 @@ test("processes message events", async () => {
 
 test("processes message events", async () => {
   const spy = jest.spyOn(Item, "createFromEvent");
-  const team = await setupTeam();
-  const user = await setupUser(team);
-  const channel = await setupChannel(team, true);
+  const team = await setupTeam().save();
+  const user = await setupUser(team).save();
+  const channel = await setupChannel(team, true).save();
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {

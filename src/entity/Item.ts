@@ -1,5 +1,8 @@
-import {BaseEntity, Column, Entity, ManyToOne, PrimaryGeneratedColumn} from "typeorm";
-import {User} from "./User";
+import { BaseEntity, Column, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+
+import { Channel } from "./Channel";
+import { Event } from "./Event";
+import { User } from "./User";
 
 @Entity()
 export class Item extends BaseEntity {
@@ -35,5 +38,13 @@ export class Item extends BaseEntity {
 
   @ManyToOne((type) => User, (user) => user.items)
   public user: User;
+
+  @ManyToOne((type) => Channel, (channel) => channel.items)
+  public channel: Channel;
+
+  public createFromEvent(event: Event) {
+    const item = new Item();
+
+  }
 
 }

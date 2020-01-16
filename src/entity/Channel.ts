@@ -1,7 +1,9 @@
-import {BaseEntity, Column, Entity, ManyToOne, PrimaryGeneratedColumn} from "typeorm";
+import { BaseEntity, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
 
-import {Team} from "./Team";
+import { Item } from "./Item";
+import { Team } from "./Team";
 
+@Unique(["slackId", "teamId"])
 @Entity()
 export class Channel extends BaseEntity {
 
@@ -16,4 +18,7 @@ export class Channel extends BaseEntity {
 
   @ManyToOne((type) => Team, (team) => team.channels)
   public team: Team;
+
+  @OneToMany((type) => Item, (item) => item.channel)
+  public items: Item[];
 }

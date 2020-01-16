@@ -1,3 +1,4 @@
+import e = require("express");
 import { Channel } from "./Channel";
 import { Team } from "./Team";
 import { User } from "./User";
@@ -23,12 +24,27 @@ export class Event {
   public channel: Channel;
   public user: User;
 
-  public async findOrCreateSlackObjects() {
+  private userCommands = {
+    atMentionAdd: new RegExp(`^<@${this.team.botSlackId} add`),
+    atMentionList: new RegExp(`^<@${this.team.botSlackId} list`),
+    directAdd: /^add/,
+    directList: /^list/,
+  };
+
+  public async findTeam(): Promise<boolean> {
     const team = await Team.findOne({ where: { slackId: this.team_id } });
     if (team) {
       this.team = team;
+      return true;
+    }
+
+    return false;
+  }
+
+  public async findOrCreateSlackObjects(): Promise<Event> {
+    if (this.team) {
       let channel = await Channel.findOne({
-        where: { slackId: this.event.channel, teamId: team.id },
+        where: { slackId: this.event.channel, teamId: this.team.id },
       });
 
       if (!channel) {
@@ -50,5 +66,56 @@ export class Event {
       this.user = user;
     }
     return this;
+  }
+
+  public async process() {
+    if (this.team) {
+      await this.findOrCreateSlackObjects();
+      if (this.type === "app_mention" || "message") {
+        this.processMessageEvent();
+      }
+    } else {
+      throw new Error("No Team Found");
+    }
+  }
+
+  private processMessageEvent() {
+    switch (this.findUserCommand()) {
+      case "directAdd":
+        if (this.event.channel[0] === "D") {
+          // Add item
+        }
+        break;
+      case "atMentionAdd":
+        // Add item
+        break;
+      case "directList":
+        if (this.event.channel[0] === "D") {
+          // Send User Items
+        }
+        break;
+      case "atMentionList":
+        // Send Channel Items
+        break;
+      case "other":
+        if (this.event.channel[0] === "D") {
+          // Send Help Text
+        }
+      default:
+        // Log weirdness
+        break;
+    }
+  }
+
+  private findUserCommand(): string {
+    const loweredMessage = this.event.text.toLowerCase();
+    const actionEntry = Object.entries(this.userCommands).find((entry) => {
+      entry[1].test(loweredMessage);
+    });
+    if (actionEntry) {
+      return actionEntry[0];
+    } else {
+      return "other";
+    }
   }
 }

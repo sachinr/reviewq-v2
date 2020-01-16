@@ -8,6 +8,8 @@ import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
 
+User.prototype.fetchProfile = jest.fn();
+
 beforeEach(() => {
   return createConnection({
     database: ":memory:",
@@ -20,6 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.clearAllMocks();
   const conn = getConnection();
   return conn.close();
 });
@@ -38,7 +41,7 @@ test("hasExistingTeam() doesn't find team", async () => {
   expect(await event.findTeam()).toStrictEqual(undefined);
 });
 
-test("findOrCreateSlackObjects()", async () => {
+test("findOrCreateSlackObjects() finds channel and user", async () => {
   const team = await setupTeam();
   const user = await setupUser(team);
   const channel = await setupChannel(team, false);
@@ -57,4 +60,60 @@ test("findOrCreateSlackObjects()", async () => {
   expect(slackEvent.team.id).toBe(team.id);
   expect(slackEvent.user.id).toBe(user.id);
   expect(slackEvent.channel.id).toBe(channel.id);
-})
+});
+
+test("findOrCreateSlackObjects() creates channel and user", async () => {
+  const team = await setupTeam();
+  const slackEvent = new Event();
+  slackEvent.team_id = team.slackId;
+  slackEvent.event = {
+    channel: "C1234",
+    event_ts: "123",
+    text: "test",
+    ts: "1234",
+    type: "message",
+    user: "U1234",
+  };
+
+  await slackEvent.findOrCreateSlackObjects();
+  expect(slackEvent.user.id).toBe(1);
+  expect(slackEvent.channel.id).toBe(1);
+});
+
+test("processes message events", async () => {
+  const spy = jest.spyOn(Item, "createFromEvent");
+  const team = await setupTeam();
+  const user = await setupUser(team);
+  const channel = await setupChannel(team, true);
+  const slackEvent = new Event();
+  slackEvent.team_id = team.slackId;
+  slackEvent.event = {
+    channel: channel.slackId,
+    event_ts: "123",
+    text: "add",
+    ts: "1234",
+    type: "message",
+    user: user.slackId,
+  };
+  await slackEvent.process();
+  expect(spy).toBeCalledTimes(1);
+});
+
+test("processes message events", async () => {
+  const spy = jest.spyOn(Item, "createFromEvent");
+  const team = await setupTeam();
+  const user = await setupUser(team);
+  const channel = await setupChannel(team, true);
+  const slackEvent = new Event();
+  slackEvent.team_id = team.slackId;
+  slackEvent.event = {
+    channel: channel.slackId,
+    event_ts: "123",
+    text: `<@${team.botSlackId}> add`,
+    ts: "1234",
+    type: "message",
+    user: user.slackId,
+  };
+  await slackEvent.process();
+  expect(spy).toBeCalledTimes(1);
+});

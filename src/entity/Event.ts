@@ -25,13 +25,6 @@ export class Event {
   public channel: Channel;
   public user: User;
 
-  private userCommands = {
-    atMentionAdd: new RegExp(`^<@${this.team?.botSlackId} add`),
-    atMentionList: new RegExp(`^<@${this.team?.botSlackId} list`),
-    directAdd: /^add/,
-    directList: /^list/,
-  };
-
   public async findTeam(): Promise<Team> {
     if (!this.team) {
       const team = await Team.findOne({ where: { slackId: this.team_id } });
@@ -69,17 +62,17 @@ export class Event {
   }
 
   public async process() {
-    if (this.team) {
+    if (await this.findTeam()) {
       await this.findOrCreateSlackObjects();
       if (this.type === "app_mention" || "message") {
-        this.processMessageEvent();
+        await this.processMessageEvent();
       }
     } else {
       throw new Error("No Team Found");
     }
   }
 
-  private processMessageEvent() {
+  private async processMessageEvent() {
     switch (this.findUserCommand()) {
       case "directAdd":
         if (this.event.channel[0] === "D") {
@@ -107,10 +100,19 @@ export class Event {
     }
   }
 
+  private userCommands() {
+    return {
+      atMentionAdd: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> add`),
+      atMentionList: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> list`),
+      directAdd: /^add/,
+      directList: /^list/,
+    };
+  }
+
   private findUserCommand(): string {
     const loweredMessage = this.event.text.toLowerCase();
-    const actionEntry = Object.entries(this.userCommands).find((entry) => {
-      entry[1].test(loweredMessage);
+    const actionEntry = Object.entries(this.userCommands()).find((entry) => {
+      return entry[1].test(loweredMessage);
     });
     if (actionEntry) {
       return actionEntry[0];

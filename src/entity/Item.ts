@@ -11,6 +11,7 @@ export class Item extends BaseEntity {
     const item = new Item();
     return item;
   }
+
   @PrimaryGeneratedColumn()
   public id: number;
 

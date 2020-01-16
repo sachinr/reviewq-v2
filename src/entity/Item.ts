@@ -6,6 +6,11 @@ import { User } from "./User";
 
 @Entity()
 export class Item extends BaseEntity {
+
+  public static createFromEvent(event: Event) {
+    const item = new Item();
+    return item;
+  }
   @PrimaryGeneratedColumn()
   public id: number;
 
@@ -41,10 +46,5 @@ export class Item extends BaseEntity {
 
   @ManyToOne((type) => Channel, (channel) => channel.items)
   public channel: Channel;
-
-  public createFromEvent(event: Event) {
-    const item = new Item();
-
-  }
 
 }

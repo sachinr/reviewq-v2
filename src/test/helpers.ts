@@ -1,4 +1,5 @@
 import {getRepository} from "typeorm";
+import {Channel} from "../entity/Channel";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
 
@@ -25,4 +26,14 @@ export const setupUser = async (team: Team) => {
   await getRepository(User).save(user);
 
   return user;
+};
+
+export const setupChannel = async (team: Team, isIm: boolean) => {
+  const channel = new Channel();
+  isIm ? channel.slackId = "D1234" : channel.slackId = "C1234";
+  channel.team = team;
+
+  await getRepository(Channel).save(channel);
+
+  return channel;
 };

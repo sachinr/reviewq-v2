@@ -1,5 +1,6 @@
 import e = require("express");
 import { Channel } from "./Channel";
+import { Item } from "./Item";
 import { Team } from "./Team";
 import { User } from "./User";
 
@@ -25,24 +26,23 @@ export class Event {
   public user: User;
 
   private userCommands = {
-    atMentionAdd: new RegExp(`^<@${this.team.botSlackId} add`),
-    atMentionList: new RegExp(`^<@${this.team.botSlackId} list`),
+    atMentionAdd: new RegExp(`^<@${this.team?.botSlackId} add`),
+    atMentionList: new RegExp(`^<@${this.team?.botSlackId} list`),
     directAdd: /^add/,
     directList: /^list/,
   };
 
-  public async findTeam(): Promise<boolean> {
-    const team = await Team.findOne({ where: { slackId: this.team_id } });
-    if (team) {
+  public async findTeam(): Promise<Team> {
+    if (!this.team) {
+      const team = await Team.findOne({ where: { slackId: this.team_id } });
       this.team = team;
-      return true;
     }
 
-    return false;
+    return this.team;
   }
 
   public async findOrCreateSlackObjects(): Promise<Event> {
-    if (this.team) {
+    if (await this.findTeam()) {
       let channel = await Channel.findOne({
         where: { slackId: this.event.channel, teamId: this.team.id },
       });
@@ -83,11 +83,11 @@ export class Event {
     switch (this.findUserCommand()) {
       case "directAdd":
         if (this.event.channel[0] === "D") {
-          // Add item
+          Item.createFromEvent(this);
         }
         break;
       case "atMentionAdd":
-        // Add item
+        Item.createFromEvent(this);
         break;
       case "directList":
         if (this.event.channel[0] === "D") {

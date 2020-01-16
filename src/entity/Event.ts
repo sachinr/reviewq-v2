@@ -1,4 +1,3 @@
-import e = require("express");
 import { Channel } from "./Channel";
 import { Item } from "./Item";
 import { Team } from "./Team";

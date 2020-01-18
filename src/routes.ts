@@ -1,7 +1,6 @@
 import { EventController } from "./controller/EventController";
 import { IndexController } from "./controller/IndexController";
 import { OAuthController } from "./controller/OAuthController";
-import { UserController } from "./controller/UserController";
 
 export const Routes = [{
   action: "index",

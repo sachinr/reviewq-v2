@@ -7,15 +7,25 @@ import { User } from "./User";
 @Entity()
 export class Item extends BaseEntity {
 
-  public static createFromEvent(event: Event) {
+  public static createFromEvent(slackEvent: Event) {
     const item = new Item();
+    item.user = slackEvent.user;
+    item.channel = slackEvent.channel;
+    item.ts = slackEvent.event.ts;
+    item.message = Item.cleanMessage(slackEvent.event.text);
     return item;
+  }
+
+  private static cleanMessage(message: string) {
+    message = message.replace("<@#{bot_slack_id}> add", "");
+    message = message.replace("<@#{bot_slack_id}>", "");
+    return message;
   }
 
   @PrimaryGeneratedColumn()
   public id: number;
 
-  @Column({ nullable: true })
+  @Column()
   public channelId: number;
 
   @Column()
@@ -48,4 +58,12 @@ export class Item extends BaseEntity {
   @ManyToOne((type) => Channel, (channel) => channel.items)
   public channel: Channel;
 
+  public async saveAndNotify() {
+    // try {
+      await this.save();
+      await this.channel.postInfo("Item added! :white_check_mark:");
+    // } catch (error) {
+      // await this.channel.postError();
+    // }
+  }
 }

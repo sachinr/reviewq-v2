@@ -1,3 +1,4 @@
+
 import {createConnection, getConnection, getRepository} from "typeorm";
 
 import {setupChannel, setupTeam, setupUser} from "./helpers";
@@ -7,6 +8,12 @@ import {Event} from "../entity/Event";
 import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
+
+jest.mock("@slack/web-api", () => ({
+  WebClient: jest.fn(() => {
+    return {chat: {postMessage: jest.fn }};
+  }),
+}));
 
 User.prototype.fetchProfile = jest.fn();
 

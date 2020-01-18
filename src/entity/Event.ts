@@ -42,7 +42,7 @@ export class Event {
       if (!channel) {
         channel = new Channel();
         channel.slackId = this.event.channel;
-        channel.team = this.team;
+        channel.teamId = this.team.id;
         await channel.save();
       }
       this.channel = channel;
@@ -75,11 +75,11 @@ export class Event {
     switch (this.findUserCommand()) {
       case "directAdd":
         if (this.event.channel[0] === "D") {
-          Item.createFromEvent(this);
+          await this.addItemAndNotify();
         }
         break;
       case "atMentionAdd":
-        Item.createFromEvent(this);
+        await this.addItemAndNotify();
         break;
       case "directList":
         if (this.event.channel[0] === "D") {
@@ -97,6 +97,11 @@ export class Event {
         // Log weirdness
         break;
     }
+  }
+
+  private async addItemAndNotify() {
+    const item = Item.createFromEvent(this);
+    await item.saveAndNotify();
   }
 
   private userCommands() {

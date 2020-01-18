@@ -1,6 +1,6 @@
-import {createConnection, getConnection, getRepository} from "typeorm";
+import {createConnection, getConnection} from "typeorm";
 
-import {setupTeam, setupChannel, setupItem, setupUser} from "./helpers";
+import {setupChannel, setupItem, setupTeam, setupUser} from "./helpers";
 
 import {Channel} from "../entity/Channel";
 import {Item} from "../entity/Item";

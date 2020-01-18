@@ -1,6 +1,6 @@
 import {createConnection, getConnection, getRepository} from "typeorm";
 
-import {setupTeam, setupUser} from "./helpers";
+import {setupTeam, setupUser, setupChannel, setupItem} from "./helpers";
 
 import {Channel} from "../entity/Channel";
 import {Item} from "../entity/Item";
@@ -42,15 +42,10 @@ test("user belongs to a team", async () => {
 });
 
 test("user has many items", async () => {
-  const team = setupTeam();
-  team.save()
-  await setupUser(team).save();
-  let user = await getRepository(User).findOne(1, { relations: ["team", "items"] });
-  const item = new Item();
-  item.user = user;
-  item.ts = "123";
-  await getRepository(Item).save(item);
-
+  const team = await setupTeam().save();
+  let user = await setupUser(team).save();
+  const channel = await setupChannel(team, false).save();
+  await setupItem(channel, user).save();
   user = await getRepository(User).findOne(1, { relations: ["team", "items"] });
   expect(user.items.length).toBe(1);
 });

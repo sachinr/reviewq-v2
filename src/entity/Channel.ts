@@ -22,7 +22,7 @@ export class Channel extends BaseEntity {
   public team: Promise<Team>;
 
   @OneToMany((type) => Item, (item) => item.channel)
-  public items: Item[];
+  public items: Promise<Item[]>;
 
   public async openItems(): Promise<Item[]> {
     return await Item.find({ where: {channelId: this.id, complete: false }});

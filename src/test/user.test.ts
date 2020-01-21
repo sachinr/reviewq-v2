@@ -24,20 +24,19 @@ afterEach(() => {
 });
 
 test("store user and fetch it", async () => {
-  const team = setupTeam();
-  await team.save();
-  await setupUser(team).save();
+  const team = await setupTeam().save();
+  const user = await setupUser(team).save();
   const users = await getRepository(User).find();
   expect(users.length).toBe(1);
-  expect(users[0].firstName).toBe("Joe");
-  expect(users[0].lastName).toBe("Shmoe");
+  expect(users[0].firstName).toBe(user.firstName);
+  expect(users[0].lastName).toBe(user.lastName);
 });
 
 test("user belongs to a team", async () => {
   const team = await setupTeam().save();
   await setupUser(team).save();
   const user = await getRepository(User).findOne(1, { relations: ["team"] });
-  expect((await user.team).name).toBe("LLL");
+  expect((await user.team).name).toBe(team.name);
 });
 
 test("user has many items", async () => {

@@ -27,8 +27,8 @@ export class Team extends BaseEntity {
   public botToken: string;
 
   @OneToMany((type) => User, (user) => user.team)
-  public users: User[];
+  public users: Promise<User[]>;
 
   @OneToMany((type) => Channel, (channel) => channel.team)
-  public channels: Channel[];
+  public channels: Promise<Channel[]>;
 }

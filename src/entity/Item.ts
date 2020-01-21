@@ -9,8 +9,8 @@ export class Item extends BaseEntity {
 
   public static createFromEvent(slackEvent: Event) {
     const item = new Item();
-    item.user = slackEvent.user;
-    item.channel = slackEvent.channel;
+    item.userId = slackEvent.user.id;
+    item.channelId = slackEvent.channel.id;
     item.ts = slackEvent.event.ts;
     item.message = Item.cleanMessage(slackEvent.event.text);
     return item;
@@ -53,15 +53,15 @@ export class Item extends BaseEntity {
   public vague: boolean;
 
   @ManyToOne((type) => User, (user) => user.items)
-  public user: User;
+  public user: Promise<User>;
 
   @ManyToOne((type) => Channel, (channel) => channel.items)
-  public channel: Channel;
+  public channel: Promise<Channel>;
 
   public async saveAndNotify() {
     // try {
       await this.save();
-      await this.channel.postInfo("Item added! :white_check_mark:");
+      await (await this.channel).postInfo("Item added! :white_check_mark:");
     // } catch (error) {
       // await this.channel.postError();
     // }

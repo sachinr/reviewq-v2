@@ -42,5 +42,6 @@ test("create from event", async () => {
   await slackEvent.findOrCreateSlackObjects();
 
   const item = Item.createFromEvent(slackEvent);
-  expect(item.channel.id).toBe(1);
+  await item.save();
+  expect((await item.channel).id).toBe(1);
 });

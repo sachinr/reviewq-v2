@@ -3,9 +3,13 @@ import { Item } from "../entity/Item";
 import { Team } from "../entity/Team";
 import { User } from "../entity/User";
 
+const randomString = () => {
+  return Math.random().toString(36).substring(2, 15);
+};
+
 export const setupTeam = () => {
   const team = new Team();
-  team.name = "LLL";
+  team.name = randomString();
   team.slackId = "T1234";
   team.botSlackId = "B1234";
   team.botToken = "xoxb-1234-1234";
@@ -17,7 +21,7 @@ export const setupTeam = () => {
 export const setupUser = (team: Team) => {
   const user = new User();
   user.firstName = "Joe";
-  user.lastName = "Shmoe";
+  user.lastName = randomString();
   user.teamId = team.id;
   user.slackId = "U1234";
   user.displayName = "joeshmoe";
@@ -27,7 +31,7 @@ export const setupUser = (team: Team) => {
 
 export const setupChannel = (team: Team, isIm: boolean) => {
   const channel = new Channel();
-  isIm ? channel.slackId = "D1234" : channel.slackId = "C1234";
+  isIm ? channel.slackId = "D" + randomString() : channel.slackId = "C" + randomString();
   channel.teamId = team.id;
 
   return channel;
@@ -35,10 +39,10 @@ export const setupChannel = (team: Team, isIm: boolean) => {
 
 export const setupItem = (channel: Channel, user: User) => {
   const item = new Item();
-  item.channel = channel;
+  item.channelId = channel.id;
   item.ts = "1234.123";
-  item.message = "test message";
-  item.user = user;
+  item.message = randomString();
+  item.userId = user.id;
 
   return item;
 };

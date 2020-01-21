@@ -91,11 +91,11 @@ export class Event {
         break;
       case "directList":
         if (this.event.channel[0] === "D") {
-          // Send User Items
+          this.channel.postItemsList(0, false);
         }
         break;
       case "atMentionList":
-        // Send Channel Items
+        this.channel.postItemsList(0, false);
         break;
       case "other":
         if (this.event.channel[0] === "D") {

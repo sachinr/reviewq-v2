@@ -1,4 +1,4 @@
-import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
+import { ChatPostMessageArguments, MessageAttachment, WebClient } from "@slack/web-api";
 import { BaseEntity, Column, Entity, getRepository, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
 
 import { Item } from "./Item";
@@ -8,6 +8,8 @@ import { Team } from "./Team";
 @Entity()
 export class Channel extends BaseEntity {
   private static PRIMARY_COLOR = "#9469df";
+  private static SECONDARY_COLOR = "#dbaaaa";
+  private static PER_PAGE = 3;
 
   @PrimaryGeneratedColumn()
   public id: number;
@@ -67,5 +69,99 @@ export class Channel extends BaseEntity {
     };
     const client = new WebClient((await this.team).botToken);
     const result = await client.chat.postMessage(options as ChatPostMessageArguments);
+  }
+
+  public async postItemsList(index: number, reverse: boolean) {
+    if (index === -1) { this.postInfo(""); }
+    const attachments = await this.buildMessageAttachment(index, reverse);
+
+    let message = "Here are your messages (oldest to newest)";
+
+    if (attachments.length === 0) {
+      message = "There are no messages in the queue";
+    } else {
+      if (reverse) {
+        message = "Here are your messages (newest to oldest)";
+      }
+    }
+
+    const options = {
+      attachments,
+      channel: this.slackId,
+      replace_original: true,
+      text: message,
+      token: (await this.team).botToken,
+    };
+
+    const client = new WebClient((await this.team).botToken);
+    const result = await client.chat.postMessage(options as ChatPostMessageArguments);
+  }
+
+  private async buildMessageAttachment(first: number, reverse: boolean) {
+    let openItems = await this.openItems();
+    const count = openItems.length;
+    const pages = Math.ceil(count / Channel.PER_PAGE);
+    const currentPage = Math.ceil(first / Channel.PER_PAGE) + 1;
+
+    if (count === 0) {
+      return [];
+    }
+
+    let last = first + (Channel.PER_PAGE);
+    if (last >= count) {
+      last = count;
+    }
+    openItems = reverse ? openItems.reverse() : openItems;
+
+    const attachments = [];
+
+    const pageItems = openItems.slice(first, last);
+    for (const currentItem of pageItems) {
+      const user = await currentItem.user;
+      attachments.push({
+        author_name: user.fullName(),
+        // tslint:disable-next-line: object-literal-sort-keys
+        author_icon: user.avatar24,
+        color: Channel.SECONDARY_COLOR,
+        text: currentItem.message,
+        footer: `<${currentItem.archiveLink}|Archive link>`,
+        ts: currentItem.ts,
+        fallback: "Mark as done",
+        callback_id: "complete_item/" + this.slackId + "/" + first.toString(),
+        mrkdwn_in: ["text"],
+        actions: [{
+          name: "complete",
+          text: ":pencil: Mark as done",
+          type: "button",
+          value: currentItem.ts,
+        }],
+      });
+    }
+
+    const buttons = [];
+    if (last !== count - 1) { buttons.push(["next", last + 1, reverse]); }
+    if (first !== 0 ) { buttons.push(["previous", first - Channel.PER_PAGE, reverse]); }
+    buttons.push(["minimize", -1, reverse]);
+    if (first === 0) { buttons.push(["sort", 0, !reverse]); }
+
+    const actions: object[] = [];
+    buttons.forEach((b) => {
+      actions.push({
+        name: b[0],
+        text: b[0].toString().charAt(0).toUpperCase() + b[0].toString().slice(1),
+        type: "button",
+        value: `${b[1]}/${b[2]}`,
+      });
+    });
+
+    attachments.push({
+      actions,
+      callback_id: "pagination/" + this.slackId,
+      color: Channel.PRIMARY_COLOR,
+      fallback: "Next/Previous",
+      footer: `Page ${currentPage} of ${pages}`,
+    });
+
+    return attachments;
   }
 }

@@ -52,6 +52,7 @@ export class Event {
       if (!user) {
         user = new User();
         user.slackId = this.event.user;
+        user.teamId = this.team.id;
         await user.fetchProfile();
         await user.save();
       }
@@ -62,9 +63,16 @@ export class Event {
 
   public async process() {
     if (await this.findTeam()) {
-      await this.findOrCreateSlackObjects();
-      if (this.type === "app_mention" || "message") {
-        await this.processMessageEvent();
+      if (this.event.user !== this.team.botSlackId) {
+        // tslint:disable-next-line: no-console
+        console.log(this);
+        await this.findOrCreateSlackObjects();
+        if (this.type === "app_mention" || "message") {
+          await this.processMessageEvent();
+        }
+      } else {
+        // tslint:disable-next-line: no-console
+        console.log("Ignore Bot's own events");
       }
     } else {
       throw new Error("No Team Found");

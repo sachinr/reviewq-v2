@@ -45,7 +45,7 @@ export class OAuthController {
         if (!user) {
           user = new User();
           user.slackId = result.authed_user.id;
-          user.team = team;
+          user.teamId = team.id;
         }
         user.installer = true;
         await user.fetchProfile();

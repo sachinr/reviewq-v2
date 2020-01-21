@@ -76,7 +76,7 @@ export class User extends BaseEntity {
   public isUltraRestricted: boolean;
 
   @ManyToOne((type) => Team, (team) => team.users)
-  public team: Team;
+  public team: Promise<Team>;
 
   @OneToMany((type) => Item, (item) => item.user)
   public items: Item[];
@@ -90,7 +90,8 @@ export class User extends BaseEntity {
   }
 
   public async fetchProfile() {
-    const result = await(new WebClient(this.team.botToken)).users.info({
+    const client = new WebClient((await this.team).botToken);
+    const result = await client.users.info({
       user: this.slackId,
     }) as IUsersInfoCallResult;
 

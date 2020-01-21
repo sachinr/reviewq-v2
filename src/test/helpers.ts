@@ -18,7 +18,7 @@ export const setupUser = (team: Team) => {
   const user = new User();
   user.firstName = "Joe";
   user.lastName = "Shmoe";
-  user.team = team;
+  user.teamId = team.id;
   user.slackId = "U1234";
   user.displayName = "joeshmoe";
 

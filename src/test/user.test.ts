@@ -34,11 +34,10 @@ test("store user and fetch it", async () => {
 });
 
 test("user belongs to a team", async () => {
-  const team = await setupTeam();
-  await team.save();
+  const team = await setupTeam().save();
   await setupUser(team).save();
   const user = await getRepository(User).findOne(1, { relations: ["team"] });
-  expect(user.team.name).toBe("LLL");
+  expect((await user.team).name).toBe("LLL");
 });
 
 test("user has many items", async () => {

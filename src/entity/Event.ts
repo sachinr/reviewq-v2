@@ -6,6 +6,7 @@ import { User } from "./User";
   // tslint:disable: variable-name
 interface ISlackEventBody {
   type: string;
+  subtype: string;
   event_ts: string;
   channel: string;
   user: string;
@@ -64,10 +65,8 @@ export class Event {
   public async process() {
     if (await this.findTeam()) {
       if (this.event.user !== this.team.botSlackId) {
-        // tslint:disable-next-line: no-console
-        console.log(this);
-        await this.findOrCreateSlackObjects();
-        if (this.type === "app_mention" || "message") {
+        if (this.isMessageType()) {
+          await this.findOrCreateSlackObjects();
           await this.processMessageEvent();
         }
       } else {
@@ -77,6 +76,19 @@ export class Event {
     } else {
       throw new Error("No Team Found");
     }
+  }
+
+  private isMessageType() {
+    if (this.event.type === "message") {
+      if (!this.event.subtype) {
+        return true;
+      }
+    }
+    if (this.event.type === "app_mention") {
+      return true;
+    }
+
+    return false;
   }
 
   private async processMessageEvent() {

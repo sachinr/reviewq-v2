@@ -1,5 +1,6 @@
-import { ChatPostMessageArguments, MessageAttachment, WebClient } from "@slack/web-api";
-import { BaseEntity, Column, Entity, getRepository, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
+import nodeFetch from "node-fetch";
+import { BaseEntity, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
 
 import { Item } from "./Item";
 import { Team } from "./Team";
@@ -30,6 +31,16 @@ export class Channel extends BaseEntity {
     return await Item.find({ where: {channelId: this.id, complete: false }});
   }
 
+  public async deleteMessage(ts: string): Promise<boolean> {
+    const client = new WebClient((await this.team).botToken);
+    const result = await client.chat.delete({
+      channel: this.slackId,
+      ts,
+    });
+
+    return result.ok;
+  }
+
   public async postError(error?: string) {
     const client = new WebClient((await this.team).botToken);
     const result = await client.chat.postMessage({
@@ -38,7 +49,7 @@ export class Channel extends BaseEntity {
     });
   }
 
-  public async postInfo(info: string) {
+  public async postInfo(info: string, url?: string) {
     const count = (await this.openItems()).length;
     const itemPluralized = count > 1 ? "items" : "item";
     const message = `${info}\nThere are ${count} ${itemPluralized} in the queue`;
@@ -67,12 +78,17 @@ export class Channel extends BaseEntity {
       replace_original: true,
       text: message,
     };
-    const client = new WebClient((await this.team).botToken);
-    const result = await client.chat.postMessage(options as ChatPostMessageArguments);
+
+    if (url) {
+      const result = await nodeFetch(url, { method: "post", body: JSON.stringify(options) });
+    } else {
+      const client = new WebClient((await this.team).botToken);
+      const result = await client.chat.postMessage(options as ChatPostMessageArguments);
+    }
   }
 
-  public async postItemsList(index: number, reverse: boolean) {
-    if (index === -1) { this.postInfo(""); }
+  public async postItemsList(index: number, reverse: boolean, url?: string) {
+    if (index === -1) { this.postInfo("", url); }
     const attachments = await this.buildMessageAttachment(index, reverse);
 
     let message = "Here are your messages (oldest to newest)";
@@ -93,8 +109,13 @@ export class Channel extends BaseEntity {
       token: (await this.team).botToken,
     };
 
-    const client = new WebClient((await this.team).botToken);
-    const result = await client.chat.postMessage(options as ChatPostMessageArguments);
+    if (url) {
+      const result = await nodeFetch(url, { method: "post", body: JSON.stringify(options) });
+    } else {
+      const client = new WebClient((await this.team).botToken);
+      const result = await client.chat.postMessage(options as ChatPostMessageArguments);
+    }
+
   }
 
   private async buildMessageAttachment(first: number, reverse: boolean) {

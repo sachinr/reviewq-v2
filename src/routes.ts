@@ -1,5 +1,6 @@
 import { EventController } from "./controller/EventController";
 import { IndexController } from "./controller/IndexController";
+import { InteractiveMessageController } from "./controller/InteractiveMessageController";
 import { OAuthController } from "./controller/OAuthController";
 
 export const Routes = [{
@@ -17,4 +18,10 @@ export const Routes = [{
   controller: EventController,
   method: "post",
   route: "/events",
-}];
+}, {
+  action: "interactiveMessage",
+  controller: InteractiveMessageController,
+  method: "post",
+  route: "/interactive-message",
+},
+];

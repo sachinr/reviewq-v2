@@ -17,6 +17,28 @@ createConnection().then(async (connection) => {
   // create express app
   const app = express();
 
+  // const rawBodySaver = (req: express.Request, res: express.Response, buf: Buffer, encoding: string) => {
+  //   if (buf && buf.length) {
+  //     req.rawBody = buf.toString(encoding || "utf8");
+  //   }
+  // };
+
+  // const verifySignature = function (req) {
+  //   const signature = req.headers['x-slack-signature']
+  //   const timestamp = req.headers['x-slack-request-timestamp']
+  //   const hmac = crypto.createHmac('sha256', process.env.SIGNING_SECRET)
+  //   const [version, hash] = signature.split('=')
+
+  //   hmac.update(`${version}:${timestamp}:${req.rawBody}`)
+
+  //   // check that the request signature matches expected value
+  //   return hmac.digest('hex') === hash
+  // };
+
+  // app.use(bodyParser.urlencoded({ verify: rawBodySaver, extended: true }));
+  // app.use(bodyParser.json({ verify: rawBodySaver }));
+
+  app.use(bodyParser.urlencoded({ extended: true }));
   app.use(bodyParser.json());
 
   // register express routes from defined application routes

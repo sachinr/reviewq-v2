@@ -71,11 +71,11 @@ export class InteractiveMessage {
 
   public async process() {
     if (await this.findTeam()) {
-      switch (this.callbackArray()[0]) {
+      switch (this.callbackArray()[0].toLowerCase()) {
         case "all":
         case "pagination":
           await this.findOrCreateSlackObjects();
-          if (this.actions[0].value === "close") { this.channel.deleteMessage(this.message_ts); }
+          if (this.actions[0].value === "Close") { this.channel.deleteMessage(this.message_ts); }
           this.channel.postItemsList(parseInt(this.actions[0].value, 10), false, this.response_url);
           break;
         case "complete_item":

@@ -6,7 +6,7 @@ import { User } from "./User";
   // tslint:disable: variable-name
 interface ISlackEventBody {
   type: string;
-  subtype: string;
+  subtype?: string;
   event_ts: string;
   channel: string;
   user: string;
@@ -103,11 +103,11 @@ export class Event {
         break;
       case "directList":
         if (this.event.channel[0] === "D") {
-          this.channel.postItemsList(0, false);
+          this.channel.postItemsList(1, false);
         }
         break;
       case "atMentionList":
-        this.channel.postItemsList(0, false);
+        this.channel.postItemsList(1, false);
         break;
       case "other":
         if (this.event.channel[0] === "D") {

@@ -1,18 +1,20 @@
+import { getRepository } from "typeorm";
 import { Channel } from "./Channel";
 import { Item } from "./Item";
+import { ICompleteButton, IPaginationButton } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
 
 // tslint:disable: variable-name
-interface IActions {
+interface IAction {
   name: string;
   type: string;
   value: string;
 }
 
-export class InteractiveMessage {
+export class InteractiveMessageEvent {
   public type: string;
-  public actions: IActions[];
+  public actions: IAction[];
   public callback_id: string;
   public team_id: string;
   public channel_id: string;
@@ -27,9 +29,11 @@ export class InteractiveMessage {
   public team: Team;
   public channel: Channel;
   public user: User;
+  public initiatingAction: IAction;
 
-  public callbackArray(): string[] {
-    return this.callback_id.split("/");
+  public constructor(interactiveMessagePayload: object) {
+    Object.assign(this, interactiveMessagePayload);
+    this.initiatingAction = this.actions[0];
   }
 
   public async findTeam(): Promise<Team> {
@@ -41,7 +45,7 @@ export class InteractiveMessage {
     return this.team;
   }
 
-  public async findOrCreateSlackObjects(): Promise<InteractiveMessage> {
+  public async findOrCreateSlackObjects(): Promise<InteractiveMessageEvent> {
     if (await this.findTeam()) {
       let channel = await Channel.findOne({
         where: { slackId: this.channel_id, teamId: this.team.id },
@@ -71,15 +75,25 @@ export class InteractiveMessage {
 
   public async process() {
     if (await this.findTeam()) {
-      switch (this.callbackArray()[0].toLowerCase()) {
-        case "all":
+      switch (this.callback_id) {
         case "pagination":
           await this.findOrCreateSlackObjects();
-          if (this.actions[0].value === "Close") { this.channel.deleteMessage(this.message_ts); }
-          this.channel.postItemsList(parseInt(this.actions[0].value, 10), false, this.response_url);
+          const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;
+          if (paginationInfo.text === "Close") {
+            this.channel.deleteMessage(this.message_ts);
+          } else {
+            this.channel.postItemsList(paginationInfo.start, paginationInfo.reverse, this.response_url);
+          }
           break;
         case "complete_item":
-
+          await this.findOrCreateSlackObjects();
+          const completionInfo = JSON.parse(this.initiatingAction.value) as ICompleteButton;
+          const item = await getRepository(Item).findOne({
+            where: { channelId: this.channel.id, ts: completionInfo.ts },
+          });
+          item.markComplete(this.user);
+          await item.save();
+          await this.channel.postItemsList(completionInfo.start, completionInfo.reverse, this.response_url);
           break;
         case "vague":
 

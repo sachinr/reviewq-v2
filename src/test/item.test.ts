@@ -1,6 +1,6 @@
 import {createConnection, getConnection, getRepository} from "typeorm";
 
-import {setupChannel, setupTeam, setupUser} from "./helpers";
+import {setupChannel, setupItem, setupTeam, setupUser} from "./helpers";
 
 import {Channel} from "../entity/Channel";
 import {Event} from "../entity/Event";
@@ -44,4 +44,18 @@ test("create from event", async () => {
   const item = Item.createFromEvent(slackEvent);
   await item.save();
   expect((await item.channel).id).toBe(1);
+});
+
+test("mark complete", async () => {
+  const team = await setupTeam().save();
+  const user = await setupUser(team).save();
+  const user2 = await setupUser(team).save();
+  const channel = await setupChannel(team, true).save();
+  const item = await setupItem(channel, user).save();
+
+  item.markComplete(user2);
+  await item.save();
+
+  expect(item.complete).toBeTruthy();
+  expect((await item.completedBy).id).toBe(user2.id);
 });

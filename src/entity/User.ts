@@ -81,6 +81,9 @@ export class User extends BaseEntity {
   @OneToMany((type) => Item, (item) => item.user)
   public items: Item[];
 
+  @OneToMany((type) => Item, (item) => item.completedBy)
+  public completedItems: Item[];
+
   public fullName(): string {
     if (this.firstName) {
       return `${this.firstName} ${this.lastName}`;

@@ -1,5 +1,5 @@
 import { WebClient } from "@slack/web-api";
-import { BaseEntity, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { BaseEntity, Between, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
 
 import { Item } from "./Item";
 import { Message } from "./Message";
@@ -8,10 +8,6 @@ import { Team } from "./Team";
 @Unique(["slackId", "teamId"])
 @Entity()
 export class Channel extends BaseEntity {
-  private static PRIMARY_COLOR = "#9469df";
-  private static SECONDARY_COLOR = "#dbaaaa";
-  private static PER_PAGE = 3;
-
   @PrimaryGeneratedColumn()
   public id: number;
 
@@ -28,7 +24,21 @@ export class Channel extends BaseEntity {
   public items: Promise<Item[]>;
 
   public async openItems(): Promise<Item[]> {
-    return await Item.find({ where: {channelId: this.id, complete: false }});
+    return await Item.find({
+      order: { id: "ASC" },
+      where: { channelId: this.id, complete: false },
+    });
+  }
+
+  public async recentlyClosed(): Promise<Item[]> {
+    const dateNow = new Date();
+    const dateThen = new Date(new Date().setMinutes(new Date().getMinutes() - 60));
+    const findOperator = Between(dateThen, dateNow);
+    return await Item.find({
+      where: {
+        dateCompleted: findOperator,
+      },
+    });
   }
 
   public async deleteMessage(ts: string): Promise<boolean> {

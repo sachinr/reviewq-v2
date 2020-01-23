@@ -1,12 +1,11 @@
 import { NextFunction, Request, Response } from "express";
-import { InteractiveMessage } from "../entity/InteractiveMessage";
+import { InteractiveMessageEvent } from "../entity/InteractiveMessageEvent";
 
 export class InteractiveMessageController {
 
   public async interactiveMessage(request: Request, response: Response, next: NextFunction) {
     const payload = this.parseBody(request.body.payload);
-    let interactiveMessage: InteractiveMessage;
-    interactiveMessage = Object.assign(new InteractiveMessage(), payload);
+    const interactiveMessage = new InteractiveMessageEvent(payload);
     if (interactiveMessage.findTeam()) {
       response.send("");
       interactiveMessage.process();

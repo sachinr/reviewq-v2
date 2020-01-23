@@ -44,10 +44,10 @@ export class Item extends BaseEntity {
   public complete: boolean;
 
   @Column({ nullable: true })
-  public dateCompleted: number;
+  public completedById: number;
 
   @Column({ nullable: true })
-  public completedBy: string;
+  public dateCompleted: Date;
 
   @Column({ default: false })
   public vague: boolean;
@@ -58,6 +58,9 @@ export class Item extends BaseEntity {
   @ManyToOne((type) => Channel, (channel) => channel.items)
   public channel: Promise<Channel>;
 
+  @ManyToOne((type) => User, (user) => user.completedItems)
+  public completedBy: Promise<User>;
+
   public async saveAndNotify() {
     // try {
       await this.save();
@@ -65,5 +68,11 @@ export class Item extends BaseEntity {
     // } catch (error) {
       // await this.channel.postError();
     // }
+  }
+
+  public markComplete(user: User) {
+    this.complete = true;
+    this.completedById = user.id;
+    this.dateCompleted = new Date();
   }
 }

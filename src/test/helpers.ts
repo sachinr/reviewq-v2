@@ -23,7 +23,7 @@ export const setupUser = (team: Team) => {
   user.firstName = "Joe";
   user.lastName = randomString();
   user.teamId = team.id;
-  user.slackId = "U1234";
+  user.slackId = "U" + randomString();
   user.displayName = "joeshmoe";
 
   return user;

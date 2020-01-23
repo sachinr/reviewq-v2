@@ -14,6 +14,18 @@ interface IPaginationInfo {
   reverse: boolean;
 }
 
+export interface IPaginationButton {
+  text: string;
+  start: number;
+  reverse: boolean;
+}
+
+export interface ICompleteButton {
+  ts: string;
+  start: number;
+  reverse: boolean;
+}
+
 export class Message {
   private static PRIMARY_COLOR = "#9469df";
   private static SECONDARY_COLOR = "#dbaaaa";
@@ -103,16 +115,16 @@ export class Message {
          name: "All",
          text: "View all",
          type: "button",
-         value: "1",
+         value: JSON.stringify({ text: "All", start: 1, reverse: false }),
        },
        {
          name: "Close",
          text: "Close",
          type: "button",
-         value: "Close",
+         value: JSON.stringify({ text: "Close" }),
        },
      ],
-     callback_id: "all/" + this.channel.slackId,
+     callback_id: "pagination",
      color: Message.PRIMARY_COLOR,
      fallback: "FALLBACK",
    });
@@ -142,6 +154,7 @@ export class Message {
       start,
       totalItems,
       totalPages,
+      reverse,
     } as IPaginationInfo;
   }
 
@@ -166,13 +179,13 @@ export class Message {
         footer: `<${currentItem.archiveLink}|Archive link>`,
         ts: currentItem.ts,
         fallback: "Mark as done",
-        callback_id: "complete_item/" + this.channel.slackId + "/" + start.toString(),
+        callback_id: "complete_item",
         mrkdwn_in: ["text"],
         actions: [{
           name: "complete",
           text: ":pencil: Mark as done",
           type: "button",
-          value: currentItem.ts,
+          value: JSON.stringify({ ts: currentItem.ts, start, reverse } as ICompleteButton),
         }],
       });
     }
@@ -183,32 +196,31 @@ export class Message {
   }
 
   private addPaginationButtons(pagination: IPaginationInfo) {
-    const buttons = [];
+    const buttons: IPaginationButton[] = [];
     if (pagination.end < pagination.totalItems) {
-      buttons.push(["Next", pagination.end + 1, pagination.reverse]);
+      buttons.push({text: "Next", start: pagination.end + 1, reverse: pagination.reverse});
     }
     if (pagination.start > Message.PER_PAGE) {
-      // tslint:disable-next-line: max-line-length
-      buttons.push(["Previous", pagination.start - Message.PER_PAGE, pagination.reverse]);
+      buttons.push({text: "Previous", start: pagination.start - Message.PER_PAGE, reverse: pagination.reverse});
     }
-    buttons.push(["Minimize", -1, pagination.reverse]);
-    if (pagination.start === 0) {
-      buttons.push(["Sort", 0, !pagination.reverse]);
+    buttons.push({ text: "Minimize", start: -1, reverse: pagination.reverse });
+    if (pagination.start === 1) {
+      buttons.push({ text: "Sort", start: 1, reverse: !pagination.reverse });
     }
 
     const actions: AttachmentAction[] = [];
-    buttons.forEach((b) => {
+    buttons.forEach((button) => {
       actions.push({
-        name: b[0],
-        text: b[0],
+        name: button.text,
+        text: button.text,
         type: "button",
-        value: `${b[1]}/${b[2]}`,
+        value: JSON.stringify(button),
       } as AttachmentAction);
     });
 
     this.attachments.push({
       actions,
-      callback_id: "pagination/" + this.channel.slackId,
+      callback_id: "pagination",
       color: Message.PRIMARY_COLOR,
       fallback: "Next/Previous",
       footer: `Page ${pagination.currentPage} of ${pagination.totalPages}`,

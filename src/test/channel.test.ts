@@ -12,7 +12,7 @@ beforeEach(() => {
     database: ":memory:",
     dropSchema: true,
     entities: [User, Team, Item, Channel],
-    logging: false,
+    logging: true,
     synchronize: true,
     type: "sqlite",
   });

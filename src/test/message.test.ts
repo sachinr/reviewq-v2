@@ -42,13 +42,14 @@ test("paginates through open items", async () => {
   }
   const message = new Message(channel);
   await message.addOpenItems(1, false);
-  expect(message.attachments[3].actions.length).toBe(2);
+  expect(message.attachments[3].actions.length).toBe(3);
   expect(message.attachments[3].actions[0].name).toBe("Next");
   expect(message.attachments[3].actions[1].name).toBe("Minimize");
+  expect(message.attachments[3].actions[2].name).toBe("Sort");
   expect(message.attachments[3].footer).toBe("Page 1 of 3");
 
   const message2 = new Message(channel);
-  await message2.addOpenItems(parseInt(message.attachments[3].actions[0].value, 10), false);
+  await message2.addOpenItems(JSON.parse(message.attachments[3].actions[0].value).start, false);
   expect(message2.attachments[3].actions.length).toBe(3);
   expect(message2.attachments[3].actions[0].name).toBe("Next");
   expect(message2.attachments[3].actions[1].name).toBe("Previous");
@@ -56,7 +57,7 @@ test("paginates through open items", async () => {
   expect(message2.attachments[3].footer).toBe("Page 2 of 3");
 
   const message3 = new Message(channel);
-  await message3.addOpenItems(parseInt(message2.attachments[3].actions[0].value, 10), false);
+  await message3.addOpenItems(JSON.parse(message2.attachments[3].actions[0].value).start, false);
   expect(message3.attachments[1].actions.length).toBe(2);
   expect(message3.attachments[1].actions[0].name).toBe("Previous");
   expect(message3.attachments[1].actions[1].name).toBe("Minimize");

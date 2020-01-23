@@ -1,25 +1,23 @@
-import { BaseEntity, Column, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { BaseEntity, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 import { Channel } from "./Channel";
 import { Event } from "./Event";
+import { Message } from "./Message";
+import { Team } from "./Team";
 import { User } from "./User";
 
 @Entity()
 export class Item extends BaseEntity {
 
-  public static createFromEvent(slackEvent: Event) {
+  public static async saveFromEvent(slackEvent: Event) {
     const item = new Item();
     item.userId = slackEvent.user.id;
     item.channelId = slackEvent.channel.id;
     item.ts = slackEvent.event.ts;
-    item.message = Item.cleanMessage(slackEvent.event.text);
+    item.message = slackEvent.event.text;
+    await item.cleanMessage(slackEvent.user.teamId);
+    await item.save();
     return item;
-  }
-
-  private static cleanMessage(message: string) {
-    message = message.replace("<@#{bot_slack_id}> add", "");
-    message = message.replace("<@#{bot_slack_id}>", "");
-    return message;
   }
 
   @PrimaryGeneratedColumn()
@@ -61,18 +59,48 @@ export class Item extends BaseEntity {
   @ManyToOne((type) => User, (user) => user.completedItems)
   public completedBy: Promise<User>;
 
-  public async saveAndNotify() {
-    // try {
-      await this.save();
-      await (await this.channel).postInfo("Item added! :white_check_mark:");
-    // } catch (error) {
-      // await this.channel.postError();
-    // }
+  @CreateDateColumn()
+  public createdAt: Date;
+
+  @UpdateDateColumn()
+  public updatedAt: Date;
+
+  public async notify(notificationType: "created" | "completed") {
+    switch (notificationType) {
+      case "created":
+        await (await this.channel).postInfo("Item added! :white_check_mark:");
+        break;
+      case "completed":
+        if (this.complete) {
+          if (this.completedById !== this.userId) {
+            const channel = new Channel();
+            const itemUser = await this.user;
+            channel.slackId = itemUser.slackId;
+            channel.team = Promise.resolve((await this.user).team);
+            await new Message(channel, {
+              text: `${this.archiveLink} was marked as complete by <@${(await this.completedBy).slackId}>`,
+            }).post();
+          }
+        }
+
+        break;
+    }
   }
 
-  public markComplete(user: User) {
+  public async markComplete(completionUser: User) {
     this.complete = true;
-    this.completedById = user.id;
+    this.completedById = completionUser.id;
     this.dateCompleted = new Date();
   }
+
+  private async cleanMessage(teamId: number) {
+    const team = await Team.findOne(teamId);
+
+    this.message = this.message.replace(/^(A|a)dd/, "");
+    this.message = this.message.replace(`<@${team.botSlackId}> add`, "");
+    this.message = this.message.replace(`<@${team.botSlackId}> Add`, "");
+    this.message = this.message.replace(`<@${team.botSlackId}>`, "");
+    this.message = this.message.trim();
+  }
+
 }

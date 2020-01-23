@@ -120,8 +120,8 @@ export class Event {
   }
 
   private async addItemAndNotify() {
-    const item = Item.createFromEvent(this);
-    await item.saveAndNotify();
+    const item = await Item.saveFromEvent(this);
+    await item.notify("created");
   }
 
   private userCommands() {

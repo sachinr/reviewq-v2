@@ -11,7 +11,7 @@ import {User} from "../entity/User";
 
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
-    return {chat: {postMessage: jest.fn }};
+    return {chat: {postMessage: jest.fn() }};
   }),
 }));
 
@@ -88,7 +88,7 @@ test("findOrCreateSlackObjects() creates channel and user", async () => {
 });
 
 test("processes message events", async () => {
-  const spy = jest.spyOn(Item, "createFromEvent");
+  const spy = jest.spyOn(Item, "saveFromEvent");
   const team = await setupTeam().save();
   const user = await setupUser(team).save();
   const channel = await setupChannel(team, true).save();
@@ -107,7 +107,7 @@ test("processes message events", async () => {
 });
 
 test("processes message events", async () => {
-  const spy = jest.spyOn(Item, "createFromEvent");
+  const spy = jest.spyOn(Item, "saveFromEvent");
   const team = await setupTeam().save();
   const user = await setupUser(team).save();
   const channel = await setupChannel(team, true).save();

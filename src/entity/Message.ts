@@ -21,7 +21,8 @@ export interface IPaginationButton {
 }
 
 export interface ICompleteButton {
-  ts: string;
+  itemId: number;
+  itemTs: string;
   start: number;
   reverse: boolean;
 }
@@ -185,7 +186,7 @@ export class Message {
           name: "complete",
           text: ":pencil: Mark as done",
           type: "button",
-          value: JSON.stringify({ ts: currentItem.ts, start, reverse } as ICompleteButton),
+          value: JSON.stringify({ itemId: currentItem.id, itemTs: currentItem.ts, start, reverse } as ICompleteButton),
         }],
       });
     }

@@ -91,6 +91,7 @@ export class Item extends BaseEntity {
     this.complete = true;
     this.completedById = completionUser.id;
     this.dateCompleted = new Date();
+    await this.save();
   }
 
   private async cleanMessage(teamId: number) {
@@ -102,5 +103,4 @@ export class Item extends BaseEntity {
     this.message = this.message.replace(`<@${team.botSlackId}>`, "");
     this.message = this.message.trim();
   }
-
 }

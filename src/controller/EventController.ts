@@ -7,9 +7,11 @@ export class EventController {
       response.send({ challenge: request.body.challenge });
     } else if (request.body.type === "event_callback") {
       const slackEvent: Event = Object.assign(new Event(), request.body);
-      if (slackEvent.findTeam()) {
+      if (await slackEvent.findTeam()) {
         response.sendStatus(200);
-        slackEvent.process();
+        if (slackEvent.event.user !== slackEvent.team.botSlackId) {
+          if (slackEvent.isMessageType()) { slackEvent.processMessageEvent(); }
+        }
       } else {
         response.sendStatus(500);
       }

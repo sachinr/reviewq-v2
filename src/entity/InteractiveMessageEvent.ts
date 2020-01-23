@@ -1,7 +1,4 @@
-import { getRepository } from "typeorm";
 import { Channel } from "./Channel";
-import { Item } from "./Item";
-import { ICompleteButton, IPaginationButton } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
 
@@ -72,38 +69,4 @@ export class InteractiveMessageEvent {
     }
     return this;
   }
-
-  public async process() {
-    if (await this.findTeam()) {
-      switch (this.callback_id) {
-        case "pagination":
-          await this.findOrCreateSlackObjects();
-          const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;
-          if (paginationInfo.text === "Close") {
-            this.channel.deleteMessage(this.message_ts);
-          } else {
-            this.channel.postItemsList(paginationInfo.start, paginationInfo.reverse, this.response_url);
-          }
-          break;
-        case "complete_item":
-          await this.findOrCreateSlackObjects();
-          const completionInfo = JSON.parse(this.initiatingAction.value) as ICompleteButton;
-          const item = await getRepository(Item).findOne({
-            where: { channelId: this.channel.id, ts: completionInfo.ts },
-          });
-          item.markComplete(this.user);
-          await item.save();
-          await this.channel.postItemsList(completionInfo.start, completionInfo.reverse, this.response_url);
-          break;
-        case "vague":
-
-        default:
-          break;
-      }
-
-    } else {
-      throw new Error("No Team Found");
-    }
-  }
-
 }

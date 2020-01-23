@@ -102,7 +102,7 @@ test("processes message events", async () => {
     type: "message",
     user: user.slackId,
   };
-  await slackEvent.process();
+  await slackEvent.processMessageEvent();
   expect(spy).toBeCalledTimes(1);
 });
 
@@ -121,6 +121,6 @@ test("processes message events", async () => {
     type: "message",
     user: user.slackId,
   };
-  await slackEvent.process();
+  await slackEvent.processMessageEvent();
   expect(spy).toBeCalledTimes(1);
 });

@@ -62,23 +62,7 @@ export class Event {
     return this;
   }
 
-  public async process() {
-    if (await this.findTeam()) {
-      if (this.event.user !== this.team.botSlackId) {
-        if (this.isMessageType()) {
-          await this.findOrCreateSlackObjects();
-          await this.processMessageEvent();
-        }
-      } else {
-        // tslint:disable-next-line: no-console
-        console.log("Ignore Bot's own events");
-      }
-    } else {
-      throw new Error("No Team Found");
-    }
-  }
-
-  private isMessageType() {
+  public isMessageType() {
     if (this.event.type === "message") {
       if (!this.event.subtype) {
         return true;
@@ -91,7 +75,21 @@ export class Event {
     return false;
   }
 
-  private async processMessageEvent() {
+  public findUserCommand(): string {
+    const loweredMessage = this.event.text.toLowerCase();
+    const actionEntry = Object.entries(this.userCommands()).find((entry) => {
+      return entry[1].test(loweredMessage);
+    });
+    if (actionEntry) {
+      return actionEntry[0];
+    } else {
+      return "other";
+    }
+  }
+
+  public async processMessageEvent() {
+    await this.findOrCreateSlackObjects();
+
     switch (this.findUserCommand()) {
       case "directAdd":
         if (this.event.channel[0] === "D") {
@@ -131,17 +129,5 @@ export class Event {
       directAdd: /^add/,
       directList: /^list/,
     };
-  }
-
-  private findUserCommand(): string {
-    const loweredMessage = this.event.text.toLowerCase();
-    const actionEntry = Object.entries(this.userCommands()).find((entry) => {
-      return entry[1].test(loweredMessage);
-    });
-    if (actionEntry) {
-      return actionEntry[0];
-    } else {
-      return "other";
-    }
   }
 }

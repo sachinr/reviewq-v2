@@ -67,4 +67,16 @@ export class Channel extends BaseEntity {
 
     await message.post(url);
   }
+
+  public async addReactionToMessage(ts: string) {
+    const team = await this.team;
+    const client = new WebClient(team.botToken);
+
+    const response = await client.reactions.add({
+      channel: this.slackId,
+      name: "white_check_mark",
+      timestamp: ts,
+    });
+  }
+
 }

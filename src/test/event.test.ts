@@ -1,4 +1,3 @@
-
 import {createConnection, getConnection, getRepository} from "typeorm";
 
 import {setupChannel, setupTeam, setupUser} from "./helpers";

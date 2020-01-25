@@ -1,4 +1,6 @@
 import { Channel } from "./Channel";
+import { Item } from "./Item";
+import { ICompleteButton, IPaginationButton } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
 
@@ -69,4 +71,27 @@ export class InteractiveMessageEvent {
     }
     return this;
   }
+
+  public async completeItem() {
+    await this.findOrCreateSlackObjects();
+    const completionInfo = JSON.parse(this.initiatingAction.value) as ICompleteButton;
+    // TODO: Verify that interactiveMessage can't be spoofed
+    const item = await Item.findOne(completionInfo.itemId);
+    await item.markComplete(this.user);
+    await this.channel.postItemsList(completionInfo.start,
+      completionInfo.reverse, this.response_url);
+    await this.channel.addReactionToMessage(completionInfo.itemTs);
+  }
+
+  public async paginate() {
+    await this.findOrCreateSlackObjects();
+    const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;
+    if (paginationInfo.text === "Close") {
+      this.channel.deleteMessage(this.message_ts);
+    } else {
+      this.channel.postItemsList(paginationInfo.start,
+        paginationInfo.reverse, this.response_url);
+    }
+  }
+
 }

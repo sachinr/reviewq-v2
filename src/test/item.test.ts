@@ -2,11 +2,12 @@ import {createConnection, getConnection, getRepository} from "typeorm";
 
 import {setupChannel, setupItem, setupTeam, setupUser} from "./helpers";
 
-import {Channel} from "../entity/Channel";
-import {Event} from "../entity/Event";
-import {Item} from "../entity/Item";
-import {Team} from "../entity/Team";
-import {User} from "../entity/User";
+import { Channel } from "../entity/Channel";
+import { Event } from "../entity/Event";
+import { Item } from "../entity/Item";
+import { Team } from "../entity/Team";
+import { User } from "../entity/User";
+
 import { WebClient } from "@slack/web-api";
 
 const postMessage = jest.fn();

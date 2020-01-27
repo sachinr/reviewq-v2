@@ -12,7 +12,7 @@ interface ISlackEventBody {
   user: string;
   text: string;
   ts: string;
-  attachments: ISlackEventAttachment[];
+  attachments?: ISlackEventAttachment[];
 }
 
 interface ISlackEventAttachment {
@@ -55,7 +55,7 @@ export class Event {
       if (!channel) {
         channel = new Channel();
         channel.slackId = this.event.channel;
-        channel.team = Promise.resolve(this.team);
+        channel.team = this.team;
         await channel.save();
       }
       this.channel = channel;
@@ -65,7 +65,7 @@ export class Event {
       if (!user) {
         user = new User();
         user.slackId = this.event.user;
-        user.team = Promise.resolve(this.team);
+        user.team = this.team;
         await user.fetchProfile();
         await user.save();
       }

@@ -12,8 +12,6 @@ export class EventController {
 
         case "event_callback":
           response.sendStatus(200);
-          // tslint:disable-next-line: no-console
-          console.log(request.body.event.attachments);
           const slackEvent: Event = Object.assign(new Event(), request.body);
           if (await slackEvent.findTeam()) {
             if (slackEvent.event.user !== slackEvent.team.botSlackId) {

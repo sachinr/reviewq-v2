@@ -162,7 +162,7 @@ export class Message {
     if (url) {
       const result = await nodeFetch(url, { method: "post", body: JSON.stringify(args) });
     } else {
-      const client = new WebClient((await this.channel.team).botToken);
+      const client = new WebClient(this.channel.team.botToken);
       const result = await client.chat.postMessage(args as ChatPostMessageArguments);
     }
   }

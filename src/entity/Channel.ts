@@ -18,10 +18,10 @@ export class Channel extends BaseEntity {
   public teamId: number;
 
   @ManyToOne((type) => Team, (team) => team.channels, { eager: true })
-  public team: Promise<Team>;
+  public team: Team;
 
   @OneToMany((type) => Item, (item) => item.channel)
-  public items: Promise<Item[]>;
+  public items: Item[];
 
   public async openItems(): Promise<Item[]> {
     return await Item.find({
@@ -42,7 +42,7 @@ export class Channel extends BaseEntity {
   }
 
   public async deleteMessage(ts: string): Promise<boolean> {
-    const client = new WebClient((await this.team).botToken);
+    const client = new WebClient((this.team).botToken);
     const result = await client.chat.delete({
       channel: this.slackId,
       ts,
@@ -81,8 +81,7 @@ export class Channel extends BaseEntity {
   }
 
   public async addReactionToMessage(ts: string) {
-    const team = await this.team;
-    const client = new WebClient(team.botToken);
+    const client = new WebClient(this.team.botToken);
 
     const response = await client.reactions.add({
       channel: this.slackId,

@@ -10,7 +10,14 @@ import {User} from "../entity/User";
 
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
-    return {chat: {postMessage: jest.fn() }};
+    return {
+      chat: { postMessage: jest.fn() },
+      team: {
+        info: jest.fn(() => {
+          return { ok: true, team: { domain: "testsuite.com" } };
+        }),
+      },
+    };
   }),
 }));
 
@@ -54,6 +61,7 @@ test("findOrCreateSlackObjects() finds channel and user", async () => {
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
+    attachments: [],
     channel: channel.slackId,
     event_ts: "123",
     text: "test",
@@ -73,6 +81,7 @@ test("findOrCreateSlackObjects() creates channel and user", async () => {
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
+    attachments: [],
     channel: "C1234",
     event_ts: "123",
     text: "test",
@@ -94,6 +103,7 @@ test("processes message events", async () => {
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
+    attachments: [],
     channel: channel.slackId,
     event_ts: "123",
     text: "add",
@@ -113,6 +123,7 @@ test("processes message events", async () => {
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
+    attachments: [],
     channel: channel.slackId,
     event_ts: "123",
     text: `<@${team.botSlackId}> add`,

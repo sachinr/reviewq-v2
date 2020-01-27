@@ -32,8 +32,8 @@ export class Item extends BaseEntity {
 
   public static async saveFromEvent(slackEvent: Event) {
     const item = new Item();
-    item.user = Promise.resolve(slackEvent.user);
-    item.channel = Promise.resolve(slackEvent.channel);
+    item.user = slackEvent.user;
+    item.channel = slackEvent.channel;
     item.ts = slackEvent.event.ts;
     item.message = slackEvent.event.text;
     await item.cleanMessage(slackEvent.user.teamId);
@@ -71,14 +71,14 @@ export class Item extends BaseEntity {
   @Column({ default: false })
   public vague: boolean;
 
-  @ManyToOne((type) => User, (user) => user.items)
-  public user: Promise<User>;
+  @ManyToOne((type) => User, (user) => user.items, { eager: true })
+  public user: User;
 
-  @ManyToOne((type) => Channel, (channel) => channel.items)
-  public channel: Promise<Channel>;
+  @ManyToOne((type) => Channel, (channel) => channel.items, { eager: true })
+  public channel: Channel;
 
-  @ManyToOne((type) => User, (user) => user.completedItems)
-  public completedBy: Promise<User>;
+  @ManyToOne((type) => User, (user) => user.completedItems, { eager: true })
+  public completedBy: User;
 
   @CreateDateColumn()
   public createdAt: Date;
@@ -89,9 +89,8 @@ export class Item extends BaseEntity {
   @BeforeInsert()
   public async createArchiveLink() {
     if (!this.archiveLink) {
-      const channel = await this.channel;
-      const team = await channel.team;
-      const client = new WebClient(team.botToken);
+      const channel = await Channel.findOne(this.channelId);
+      const client = new WebClient(channel.team.botToken);
       const response = await client.team.info() as ITeamInfoResult;
       if (response.ok) {
         const domain = response.team.domain;
@@ -103,17 +102,17 @@ export class Item extends BaseEntity {
   public async notify(notificationType: "created" | "completed") {
     switch (notificationType) {
       case "created":
-        await (await this.channel).postInfo("Item added! :white_check_mark:");
+        await (this.channel).postInfo("Item added! :white_check_mark:");
         break;
       case "completed":
         if (this.complete) {
           if (this.completedById !== this.userId) {
             const channel = new Channel();
-            const itemUser = await this.user;
+            const itemUser = this.user;
             channel.slackId = itemUser.slackId;
-            channel.team = Promise.resolve((await this.user).team);
+            channel.team = await Team.findOne(this.user.teamId);
             await new Message(channel, {
-              text: `${this.archiveLink} was marked as complete by <@${(await this.completedBy).slackId}>`,
+              text: `${this.archiveLink} was marked as complete by <@${this.completedBy.slackId}>`,
             }).post();
           }
         }
@@ -124,9 +123,10 @@ export class Item extends BaseEntity {
 
   public async markComplete(completionUser: User) {
     this.complete = true;
-    this.completedById = completionUser.id;
+    this.completedBy = completionUser;
     this.dateCompleted = new Date();
     await this.save();
+    this.reload();
   }
 
   private async cleanMessage(teamId: number) {

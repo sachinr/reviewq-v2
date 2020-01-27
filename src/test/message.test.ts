@@ -10,7 +10,14 @@ import {User} from "../entity/User";
 
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
-    return {chat: {postMessage: jest.fn }};
+    return {
+      chat: { postMessage: jest.fn() },
+      team: {
+        info: jest.fn(() => {
+          return { ok: true, team: { domain: "testsuite.com" } };
+        }),
+      },
+    };
   }),
 }));
 

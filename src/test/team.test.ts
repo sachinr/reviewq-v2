@@ -36,14 +36,14 @@ test("team should have users", async () => {
   let team = await setupTeam().save();
   const user = await setupUser(team).save();
   team = await Team.findOne(1, { relations: ["users"] });
-  expect((await team.users).length).toBe(1);
-  expect((await team.users)[0].firstName).toBe("Joe");
+  expect((team.users).length).toBe(1);
+  expect((team.users)[0].firstName).toBe("Joe");
 });
 
 test("team should have channels", async () => {
   let team = await setupTeam().save();
   const channel1 = await setupChannel(team, false).save();
   const channel2 = await setupChannel(team, false).save();
-  team = await Team.findOne(1);
-  expect((await team.channels).length).toBe(2);
+  team = await Team.findOne(1, {relations: ["channels"]});
+  expect(team.channels.length).toBe(2);
 });

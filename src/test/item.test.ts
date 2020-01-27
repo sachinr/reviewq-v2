@@ -14,7 +14,14 @@ const postMessage = jest.fn();
 
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
-    return {chat: {postMessage}};
+    return {
+      chat: { postMessage },
+      team: {
+        info: jest.fn(() => {
+          return { ok: true, team: { domain: "testsuite.com" } };
+        }),
+      },
+    };
   }),
 }));
 
@@ -52,7 +59,7 @@ test("create from event", async () => {
   await slackEvent.findOrCreateSlackObjects();
 
   const item = await Item.saveFromEvent(slackEvent);
-  expect((await item.channel).id).toBe(1);
+  expect(item.channel.id).toBe(1);
 });
 
 test("cleans message", async () => {
@@ -100,30 +107,28 @@ test("mark complete", async () => {
   const channel = await setupChannel(team, true).save();
   const item = await setupItem(channel, user).save();
 
-  item.markComplete(user2);
-  await item.save();
+  await item.markComplete(user2);
 
   expect(item.complete).toBeTruthy();
-  expect((await item.completedBy).id).toBe(user2.id);
+  expect(item.completedBy.id).toBe(user2.id);
 });
 
 test("notify", async () => {
-  const client = new WebClient();
   const team = await setupTeam().save();
   const user = await setupUser(team).save();
   const user2 = await setupUser(team).save();
   const channel = await setupChannel(team, true).save();
   const item = await setupItem(channel, user).save();
 
-  item.markComplete(user2);
-  await item.save();
+  await item.markComplete(user2);
   await item.notify("completed");
 
-  expect(client.chat.postMessage).toBeCalledTimes(1);
-  expect(client.chat.postMessage).toBeCalledWith({
+  expect(postMessage).toHaveBeenCalledTimes(1);
+  expect(postMessage).toBeCalledWith({
     attachments: [],
     blocks: [],
     channel: user.slackId,
+    mrkdwn: true,
     text: `${item.archiveLink} was marked as complete by <@${user2.slackId}>`,
   });
 });

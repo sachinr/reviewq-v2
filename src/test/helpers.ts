@@ -39,10 +39,10 @@ export const setupChannel = (team: Team, isIm: boolean) => {
 
 export const setupItem = (channel: Channel, user: User) => {
   const item = new Item();
-  item.channelId = channel.id;
+  item.channel = channel;
   item.ts = "1234.123";
   item.message = randomString();
-  item.userId = user.id;
+  item.user = user;
 
   return item;
 };

@@ -12,6 +12,18 @@ interface ISlackEventBody {
   user: string;
   text: string;
   ts: string;
+  attachments: ISlackEventAttachment[];
+}
+
+interface ISlackEventAttachment {
+    fallback: string;
+    text: string;
+    title: string;
+    id: number;
+    color: string;
+    mrkdwn_in: string[];
+    from_url: string;
+    is_share: boolean;
 }
 
 export class Event {
@@ -43,7 +55,7 @@ export class Event {
       if (!channel) {
         channel = new Channel();
         channel.slackId = this.event.channel;
-        channel.teamId = this.team.id;
+        channel.team = Promise.resolve(this.team);
         await channel.save();
       }
       this.channel = channel;
@@ -53,7 +65,7 @@ export class Event {
       if (!user) {
         user = new User();
         user.slackId = this.event.user;
-        user.teamId = this.team.id;
+        user.team = Promise.resolve(this.team);
         await user.fetchProfile();
         await user.save();
       }
@@ -109,7 +121,7 @@ export class Event {
         break;
       case "other":
         if (this.event.channel[0] === "D") {
-          // Send Help Text
+          this.channel.postHelpMessage();
         }
       default:
         // Log weirdness

@@ -1,18 +1,39 @@
-import { BaseEntity, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BaseEntity, BeforeInsert, Column, CreateDateColumn,
+  Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
+import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { Channel } from "./Channel";
 import { Event } from "./Event";
 import { Message } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
 
+interface ITeamInfoResult extends WebAPICallResult {
+  team: {
+    id: string;
+    name: string;
+    domain: string;
+    email_domain: string;
+    icon: {
+      image_34: string;
+      image_44: string;
+      image_68: string;
+      image_88: string;
+      image_102: string;
+      image_132: string;
+      image_230: string;
+      image_original: string;
+    };
+  };
+}
+
 @Entity()
 export class Item extends BaseEntity {
 
   public static async saveFromEvent(slackEvent: Event) {
     const item = new Item();
-    item.userId = slackEvent.user.id;
-    item.channelId = slackEvent.channel.id;
+    item.user = Promise.resolve(slackEvent.user);
+    item.channel = Promise.resolve(slackEvent.channel);
     item.ts = slackEvent.event.ts;
     item.message = slackEvent.event.text;
     await item.cleanMessage(slackEvent.user.teamId);
@@ -64,6 +85,20 @@ export class Item extends BaseEntity {
 
   @UpdateDateColumn()
   public updatedAt: Date;
+
+  @BeforeInsert()
+  public async createArchiveLink() {
+    if (!this.archiveLink) {
+      const channel = await this.channel;
+      const team = await channel.team;
+      const client = new WebClient(team.botToken);
+      const response = await client.team.info() as ITeamInfoResult;
+      if (response.ok) {
+        const domain = response.team.domain;
+        this.archiveLink = `https://${domain}.slack.com/archives/${channel.slackId}/p${this.ts.replace(".", "")}`;
+      }
+    }
+  }
 
   public async notify(notificationType: "created" | "completed") {
     switch (notificationType) {

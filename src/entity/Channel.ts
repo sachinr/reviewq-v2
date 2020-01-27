@@ -68,6 +68,18 @@ export class Channel extends BaseEntity {
     await message.post(url);
   }
 
+  public async postHelpMessage() {
+    let message = new Message(this);
+    message.addHelpMessage();
+    await message.post();
+
+    if ((await this.openItems()).length > 0) {
+      message = new Message(this);
+      await message.addSummary();
+      message.post();
+    }
+  }
+
   public async addReactionToMessage(ts: string) {
     const team = await this.team;
     const client = new WebClient(team.botToken);

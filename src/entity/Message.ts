@@ -11,6 +11,7 @@ interface IPaginationInfo {
   totalItems: number;
   totalPages: number;
   currentPage: number;
+  currentPageOpenItems: Item[];
   reverse: boolean;
 }
 
@@ -55,6 +56,7 @@ export class Message {
     this.channel = channel;
     this.attachments = [];
     this.blocks = [];
+    this.mrkdwn = true;
     if (options) {
       Object.assign(this, options);
     }
@@ -65,13 +67,33 @@ export class Message {
     return this;
   }
 
-  public async addSummary(preText: string) {
+  public async addSummary(preText: string = "") {
     const count = (await this.channel.openItems()).length;
     const itemPluralized = count > 1 ? "items" : "item";
     this.text = `There are ${count} ${itemPluralized} in the queue`;
     this.text = preText.length > 0 ? `${preText}\n${this.text}` : this.text;
 
-    this.addSummaryButtons();
+    this.attachments.push({
+      actions: [
+        {
+          name: "All",
+          text: "View all",
+          type: "button",
+          value: JSON.stringify({ text: "All", start: 1, reverse: false }),
+        },
+        {
+          name: "Close",
+          text: "Close",
+          type: "button",
+          value: JSON.stringify({ text: "Close" }),
+        },
+      ],
+      callback_id: "pagination",
+      color: Message.PRIMARY_COLOR,
+      fallback: "FALLBACK",
+    });
+
+    this.replace_original = true;
 
     return this;
   }
@@ -93,46 +115,56 @@ export class Message {
     return this;
   }
 
-  public async post(url?: string) {
-    if (url) {
-      const result = await nodeFetch(url, { method: "post", body: JSON.stringify(this.bodyArguments()) });
-    } else {
-      const client = new WebClient((await this.channel.team).botToken);
-      const result = await client.chat.postMessage(this.bodyArguments() as ChatPostMessageArguments);
-    }
+  public addHelpMessage() {
+    this.attachments.push({
+      mrkdwn_in: ["text"],
+      fallback: "Required plain-text summary of the attachment.",
+      color: Message.PRIMARY_COLOR,
+      title: "ReviewQ lets you build a queue of messages to review in a channel",
+      text: "ReviewQ is a way to manage a queue of work within the context of a channel. For example, a legal team might queue up messages requesting them to review contracts. Software development team might queue up Pull Requests that need to be reviewed.\n\n :arrow_right: To get started, invite *@reviewq* to a channel.",
+    });
+
+    this.attachments.push({
+      color: Message.SECONDARY_COLOR,
+      author_name: "Usage",
+      mrkdwn_in: ["text", "fields"],
+      fields: [
+        {
+          title: ":one: Add text to the queue",
+          value: "`@reviewq add [text to add]`",
+          short: true,
+        },
+        {
+          title: ":two: Show queue for a channel",
+          value: "`@reviewq list`",
+          short: true,
+        },
+        {
+          title: ":three: Add a message to the queue",
+          value: "<https://get.slack.help/hc/en-us/articles/203274767-Share-messages-in-Slack|Share the message> and comment with `@reviewq add`",
+          short: true,
+        },
+        {
+          title: ":four: Add a file to the queue",
+          value: "Leave a comment (not title!) with `@reviewq add` to an existing or new file",
+          short: true,
+        },
+      ],
+    });
+
+    return this;
   }
 
-  private bodyArguments() {
-    const args: any = this;
+  public async post(url?: string) {
+    const args: any = Object.assign({}, this);
     args.channel = this.channel.slackId;
 
-    return args;
-  }
-
-  private addSummaryButtons() {
-   this.attachments.push({
-     actions: [
-       {
-         name: "All",
-         text: "View all",
-         type: "button",
-         value: JSON.stringify({ text: "All", start: 1, reverse: false }),
-       },
-       {
-         name: "Close",
-         text: "Close",
-         type: "button",
-         value: JSON.stringify({ text: "Close" }),
-       },
-     ],
-     callback_id: "pagination",
-     color: Message.PRIMARY_COLOR,
-     fallback: "FALLBACK",
-   });
-
-   this.replace_original = true;
-
-   return this;
+    if (url) {
+      const result = await nodeFetch(url, { method: "post", body: JSON.stringify(args) });
+    } else {
+      const client = new WebClient((await this.channel.team).botToken);
+      const result = await client.chat.postMessage(args as ChatPostMessageArguments);
+    }
   }
 
   private async getPaginationInfo(start: number, reverse: boolean) {
@@ -142,15 +174,21 @@ export class Message {
     const totalItems = openItems.length;
     const totalPages = Math.ceil(totalItems / Message.PER_PAGE);
     const currentPage = Math.ceil(start / Message.PER_PAGE);
+    let currentPageOpenItems: Item[] = [];
 
     let end = start + (Message.PER_PAGE - 1);
     if (end > totalItems) {
       end = totalItems;
     }
 
+    if (totalItems > 0) {
+      currentPageOpenItems = openItems.slice(start - 1, end);
+    }
+
     return {
       openItems,
       currentPage,
+      currentPageOpenItems,
       end,
       start,
       totalItems,
@@ -159,18 +197,9 @@ export class Message {
     } as IPaginationInfo;
   }
 
-  private currentPageOpenItems(pagination: IPaginationInfo) {
-    if (pagination.totalItems === 0) {
-      return [];
-    }
-
-    return pagination.openItems.slice(pagination.start - 1, pagination.end);
-  }
-
   private async buildMessageAttachment(start: number, reverse: boolean) {
     const paginationInfo = await this.getPaginationInfo(start, reverse);
-    const pageItems = this.currentPageOpenItems(paginationInfo);
-    for (const currentItem of pageItems) {
+    for (const currentItem of paginationInfo.currentPageOpenItems) {
       const user = await currentItem.user;
       this.attachments.push({
         author_name: user.fullName(),

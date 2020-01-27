@@ -87,6 +87,10 @@ export class Event {
     return false;
   }
 
+  public isMemberJoined() {
+    return this.event.type === "member_joined_channel" && this.event.user === this.team.botSlackId;
+  }
+
   public findUserCommand(): string {
     const loweredMessage = this.event.text.toLowerCase();
     const actionEntry = Object.entries(this.userCommands()).find((entry) => {
@@ -100,32 +104,33 @@ export class Event {
   }
 
   public async processMessageEvent() {
-    await this.findOrCreateSlackObjects();
-
-    switch (this.findUserCommand()) {
-      case "directAdd":
-        if (this.event.channel[0] === "D") {
+    if (this.event.user !== this.team.botSlackId) {
+      await this.findOrCreateSlackObjects();
+      switch (this.findUserCommand()) {
+        case "directAdd":
+          if (this.event.channel[0] === "D") {
+            await this.addItemAndNotify();
+          }
+          break;
+        case "atMentionAdd":
           await this.addItemAndNotify();
-        }
-        break;
-      case "atMentionAdd":
-        await this.addItemAndNotify();
-        break;
-      case "directList":
-        if (this.event.channel[0] === "D") {
+          break;
+        case "directList":
+          if (this.event.channel[0] === "D") {
+            this.channel.postItemsList(1, false);
+          }
+          break;
+        case "atMentionList":
           this.channel.postItemsList(1, false);
-        }
-        break;
-      case "atMentionList":
-        this.channel.postItemsList(1, false);
-        break;
-      case "other":
-        if (this.event.channel[0] === "D") {
-          this.channel.postHelpMessage();
-        }
-      default:
-        // Log weirdness
-        break;
+          break;
+        case "other":
+          if (this.event.channel[0] === "D") {
+            this.channel.postHelpMessage();
+          }
+        default:
+          // Log weirdness
+          break;
+      }
     }
   }
 

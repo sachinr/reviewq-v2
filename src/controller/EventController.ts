@@ -1,9 +1,12 @@
 import { NextFunction, Request, Response } from "express";
 import { Event } from "../entity/Event";
+import { Message } from "../entity/Message";
 import { verifySignature } from "../helpers/slackVerificationHelper";
 
 export class EventController {
   public async event(request: Request, response: Response, next: NextFunction) {
+    // tslint:disable-next-line: no-console
+    console.log(request.body);
     if (verifySignature(request)) {
       switch (request.body.type) {
         case "url_verification":
@@ -14,12 +17,18 @@ export class EventController {
           response.sendStatus(200);
           const slackEvent: Event = Object.assign(new Event(), request.body);
           if (await slackEvent.findTeam()) {
-            if (slackEvent.event.user !== slackEvent.team.botSlackId) {
-              if (slackEvent.isMessageType()) { slackEvent.processMessageEvent(); }
-            }
-          }
-          break;
+            switch (true) {
+              case slackEvent.isMessageType():
+                slackEvent.processMessageEvent();
+                break;
 
+              case slackEvent.isMemberJoined():
+                await slackEvent.findOrCreateSlackObjects();
+                await slackEvent.channel.postWelcomeMessage();
+                break;
+            }
+            break;
+          }
         default:
           response.sendStatus(500);
       }

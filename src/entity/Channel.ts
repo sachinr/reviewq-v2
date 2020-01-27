@@ -61,6 +61,13 @@ export class Channel extends BaseEntity {
     await message.post(url);
   }
 
+  public async postWelcomeMessage() {
+    if ((await this.openItems()).length === 0) {
+      const message = new Message(this, { text: "Hi! I can help you manage a list of tasks in this channel. Click the button below to learn more." });
+      await message.post();
+    }
+  }
+
   public async postItemsList(start: number, reverse: boolean, url?: string) {
     if (start === -1) { return this.postInfo("", url); }
     const message = await new Message(this).addOpenItems(start, reverse);

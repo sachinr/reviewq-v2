@@ -234,7 +234,7 @@ export class Message {
       buttons.push({text: "Previous", start: pagination.start - Message.PER_PAGE, reverse: pagination.reverse});
     }
     buttons.push({ text: "Minimize", start: -1, reverse: pagination.reverse });
-    if (pagination.start === 1) {
+    if (pagination.start === 1 && pagination.totalItems > 1) {
       buttons.push({ text: "Sort", start: 1, reverse: !pagination.reverse });
     }
 

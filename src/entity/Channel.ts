@@ -79,20 +79,29 @@ export class Channel extends BaseEntity {
   @BeforeInsert()
   public async fetchInfo(): Promise<void> {
     const client = new WebClient(this.team.botToken);
-    const response = await client.conversations.info({ channel: this.slackId }) as IConversationInfoResult;
-    if (response.ok) {
-      this.name = response.channel.name_normalized;
-      this.isExtShared = response.channel.is_ext_shared ? true : false;
-      this.isGeneral = response.channel.is_general ? true : false;
-      this.isMember = response.channel.is_member ? true : false;
-      this.isOrgShared = response.channel.is_org_shared ? true : false;
-      this.isPrivate = response.channel.is_private ? true : false;
-      this.isReadOnly = response.channel.is_read_only ? true : false;
-      this.isShared = response.channel.is_shared ? true : false;
-      if (response.channel.is_channel || response.channel.is_group) {
-        this.type = response.channel.is_private ? "group" : "channel";
-      } else {
-        this.type = response.channel.is_im ? "im" : "mpim";
+    try {
+      const response = await client.conversations.info({ channel: this.slackId }) as IConversationInfoResult;
+      if (response.ok) {
+        this.name = response.channel.name_normalized;
+        this.isExtShared = response.channel.is_ext_shared ? true : false;
+        this.isGeneral = response.channel.is_general ? true : false;
+        this.isMember = response.channel.is_member ? true : false;
+        this.isOrgShared = response.channel.is_org_shared ? true : false;
+        this.isPrivate = response.channel.is_private ? true : false;
+        this.isReadOnly = response.channel.is_read_only ? true : false;
+        this.isShared = response.channel.is_shared ? true : false;
+        if (response.channel.is_channel || response.channel.is_group) {
+          this.type = response.channel.is_private ? "group" : "channel";
+        } else {
+          this.type = response.channel.is_im ? "im" : "mpim";
+        }
+      }
+    } catch (error) {
+      if (error.data.error === "channel_not_found") {
+        this.isMember = false;
+        if (this.slackId[0] === "G") {
+          this.type = "group";
+        } else { this.type = "im"; }
       }
     }
   }
@@ -183,5 +192,15 @@ export class Channel extends BaseEntity {
       name: "white_check_mark",
       timestamp: ts,
     });
+  }
+
+  public async join() {
+    const client = new WebClient(this.team.botToken);
+
+    if (!this.isMember && this.type === "channel") {
+      const response = await client.conversations.join({
+      channel: this.slackId,
+      });
+    }
   }
 }

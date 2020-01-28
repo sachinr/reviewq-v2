@@ -69,7 +69,7 @@ export class InteractiveMessageEvent {
       if (!channel) {
         channel = new Channel();
         channel.slackId = this.channel_id;
-        channel.teamId = this.team.id;
+        channel.team = this.team;
         await channel.save();
       }
       this.channel = channel;
@@ -93,6 +93,7 @@ export class InteractiveMessageEvent {
   public async addItemAndNotify() {
     await this.findOrCreateSlackObjects();
     const item = await Item.saveFromInteractiveMessage(this);
+    await item.channel.join();
     await item.notify("created", this.response_url);
   }
 

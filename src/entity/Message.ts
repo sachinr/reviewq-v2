@@ -69,8 +69,8 @@ export class Message {
 
   public async addSummary(preText: string = "") {
     const count = (await this.channel.openItems()).length;
-    const itemPluralized = count > 1 ? "items" : "item";
-    this.text = `There are ${count} ${itemPluralized} in the queue`;
+    const itemPluralized = count > 1 ? `are ${count} items` : `is ${count} item`;
+    this.text = `There ${itemPluralized} in the queue`;
     this.text = preText.length > 0 ? `${preText}\n${this.text}` : this.text;
 
     this.attachments.push({

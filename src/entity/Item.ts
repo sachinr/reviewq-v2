@@ -4,6 +4,7 @@ import { BaseEntity, BeforeInsert, Column, CreateDateColumn,
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { Channel } from "./Channel";
 import { Event } from "./Event";
+import { InteractiveMessageEvent } from "./InteractiveMessageEvent";
 import { Message } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
@@ -36,6 +37,17 @@ export class Item extends BaseEntity {
     item.channel = slackEvent.channel;
     item.ts = slackEvent.event.ts;
     item.message = slackEvent.event.text;
+    await item.cleanMessage(slackEvent.user.teamId);
+    await item.save();
+    return item;
+  }
+
+  public static async saveFromInteractiveMessage(slackEvent: InteractiveMessageEvent) {
+    const item = new Item();
+    item.user = slackEvent.user;
+    item.channel = slackEvent.channel;
+    item.ts = slackEvent.message.ts;
+    item.message = slackEvent.message.text;
     await item.cleanMessage(slackEvent.user.teamId);
     await item.save();
     return item;
@@ -99,10 +111,10 @@ export class Item extends BaseEntity {
     }
   }
 
-  public async notify(notificationType: "created" | "completed") {
+  public async notify(notificationType: "created" | "completed", url?: string) {
     switch (notificationType) {
       case "created":
-        await (this.channel).postInfo("Item added! :white_check_mark:");
+        await (this.channel).postInfo("Item added! :white_check_mark:", url);
         break;
       case "completed":
         if (this.complete) {
@@ -113,7 +125,7 @@ export class Item extends BaseEntity {
             channel.team = await Team.findOne(this.user.teamId);
             await new Message(channel, {
               text: `${this.archiveLink} was marked as complete by <@${this.completedBy.slackId}>`,
-            }).post();
+            }).post(url);
           }
         }
 

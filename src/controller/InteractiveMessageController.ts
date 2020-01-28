@@ -21,6 +21,9 @@ export class InteractiveMessageController {
           case "undo":
             await interactiveMsg.undoCompleteItem();
             break;
+          case "message_action_add":
+            await interactiveMsg.addItemAndNotify();
+            break;
 
           default:
             break;

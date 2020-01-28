@@ -1,3 +1,5 @@
+import { Block } from "@slack/web-api";
+
 import { Channel } from "./Channel";
 import { Item } from "./Item";
 import { ICompleteButton, IPaginationButton } from "./Message";
@@ -11,6 +13,15 @@ interface IAction {
   value: string;
 }
 
+interface IInteractiveMessageMessage {
+  type: string;
+  text: string;
+  user: string;
+  ts: string;
+  team: string;
+  blocks: Block[];
+}
+
 export class InteractiveMessageEvent {
   public type: string;
   public actions: IAction[];
@@ -20,6 +31,7 @@ export class InteractiveMessageEvent {
   public user_id: string;
   public action_ts: string;
   public message_ts: string;
+  public message?: IInteractiveMessageMessage;
   public attachment_id: string;
   public is_app_unfurl: boolean;
   public response_url: string;
@@ -32,12 +44,16 @@ export class InteractiveMessageEvent {
 
   public constructor(interactiveMessagePayload: object) {
     Object.assign(this, interactiveMessagePayload);
-    this.initiatingAction = this.actions[0];
+    if (this.actions) {
+      this.initiatingAction = this.actions?.[0];
+    } else {
+      this.initiatingAction = { name: "Message Action", type: "Message Action", value: "Message Action" };
+    }
   }
 
   public async findTeam(): Promise<Team> {
     if (!this.team) {
-      const team = await Team.findOne({ where: { slackId: this.team_id } });
+      const team = await Team.findOne({ where: { slackId: this.message?.team || this.team_id } });
       this.team = team;
     }
 
@@ -58,18 +74,26 @@ export class InteractiveMessageEvent {
       }
       this.channel = channel;
 
-      let user = await User.findOne({ where: { slackId: this.user_id } });
+      const userId = this.message?.user || this.user_id;
+
+      let user = await User.findOne({ where: { slackId: userId } });
 
       if (!user) {
         user = new User();
         user.slackId = this.user_id;
-        user.teamId = this.team.id;
+        user.team = this.team;
         await user.fetchProfile();
         await user.save();
       }
       this.user = user;
     }
     return this;
+  }
+
+  public async addItemAndNotify() {
+    await this.findOrCreateSlackObjects();
+    const item = await Item.saveFromInteractiveMessage(this);
+    await item.notify("created", this.response_url);
   }
 
   public async completeItem() {
@@ -98,7 +122,7 @@ export class InteractiveMessageEvent {
     await this.findOrCreateSlackObjects();
     const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;
     if (paginationInfo.text === "Close") {
-      this.channel.deleteMessage(this.message_ts);
+      this.channel.deleteMessage(this.message_ts, this.response_url);
     } else {
       this.channel.postItemsList(paginationInfo.start,
         paginationInfo.reverse, this.response_url);

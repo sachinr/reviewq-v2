@@ -104,32 +104,34 @@ export class Event {
   }
 
   public async processMessageEvent() {
-    if (this.event.user !== this.team.botSlackId) {
-      await this.findOrCreateSlackObjects();
-      switch (this.findUserCommand()) {
-        case "directAdd":
-          if (this.event.channel[0] === "D") {
+    if (await this.findTeam()) {
+      if (this.event.user !== this.team.botSlackId) {
+        await this.findOrCreateSlackObjects();
+        switch (this.findUserCommand()) {
+          case "directAdd":
+            if (this.event.channel[0] === "D") {
+              await this.addItemAndNotify();
+            }
+            break;
+          case "atMentionAdd":
             await this.addItemAndNotify();
-          }
-          break;
-        case "atMentionAdd":
-          await this.addItemAndNotify();
-          break;
-        case "directList":
-          if (this.event.channel[0] === "D") {
+            break;
+          case "directList":
+            if (this.event.channel[0] === "D") {
+              this.channel.postItemsList(1, false);
+            }
+            break;
+          case "atMentionList":
             this.channel.postItemsList(1, false);
-          }
-          break;
-        case "atMentionList":
-          this.channel.postItemsList(1, false);
-          break;
-        case "other":
-          if (this.event.channel[0] === "D") {
-            this.channel.postHelpMessage();
-          }
-        default:
-          // Log weirdness
-          break;
+            break;
+          case "other":
+            if (this.event.channel[0] === "D") {
+              this.channel.postHelpMessage();
+            }
+          default:
+            // Log weirdness
+            break;
+        }
       }
     }
   }

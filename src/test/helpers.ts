@@ -32,7 +32,7 @@ export const setupUser = (team: Team) => {
 export const setupChannel = (team: Team, isIm: boolean) => {
   const channel = new Channel();
   isIm ? channel.slackId = "D" + randomString() : channel.slackId = "C" + randomString();
-  channel.teamId = team.id;
+  channel.team = team;
 
   return channel;
 };

@@ -41,17 +41,17 @@ export class OAuthController {
           await team.save();
         }
 
-        let user = await User.findOne({slackId: result.authed_user.id});
+        let user = await User.findOne({slackId: result.authed_user.id}, {relations: ["team"]});
         if (!user) {
           user = new User();
           user.slackId = result.authed_user.id;
-          user.teamId = team.id;
+          user.team = team;
         }
         user.installer = true;
         await user.fetchProfile();
         await user.save();
 
-        return "App Installed!";
+        response.redirect(`https://slack.com/app_redirect?app=${result.app_id}&team=${result.team.id}`);
       } else {
         return result.response_metadata;
       }

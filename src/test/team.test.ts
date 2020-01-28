@@ -7,6 +7,24 @@ import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
 
+jest.mock("@slack/web-api", () => ({
+  WebClient: jest.fn(() => {
+    return {
+      chat: { postMessage: jest.fn() },
+      conversations: {
+        info: jest.fn(() => {
+          return { ok: true, channel: { is_channel: true } };
+        }),
+      },
+      team: {
+        info: jest.fn(() => {
+          return { ok: true, team: { domain: "testsuite.com" } };
+        }),
+      },
+    };
+  }),
+}));
+
 beforeEach(() => {
   return createConnection({
     database: ":memory:",

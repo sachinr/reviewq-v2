@@ -55,6 +55,9 @@ export class User extends BaseEntity {
   public displayName: string;
 
   @Column({ nullable: true })
+  public realName: string;
+
+  @Column({ nullable: true })
   public avatar24: string;
 
   @Column({ default: false })
@@ -88,7 +91,7 @@ export class User extends BaseEntity {
     if (this.firstName) {
       return `${this.firstName} ${this.lastName}`;
     } else {
-      return this.displayName;
+      return this.displayName || this.realName || "Unknown user";
     }
   }
 
@@ -109,6 +112,7 @@ export class User extends BaseEntity {
       this.lastName = resUser.profile.last_name;
       this.avatar24 = resUser.profile.image_24;
       this.displayName = resUser.profile.display_name;
+      this.realName = resUser.profile.real_name;
     }
   }
 

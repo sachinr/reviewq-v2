@@ -32,7 +32,7 @@ export class Channel extends BaseEntity {
 
   public async recentlyClosed(): Promise<Item[]> {
     const dateNow = new Date();
-    const dateThen = new Date(new Date().setMinutes(new Date().getMinutes() - 60));
+    const dateThen = new Date(new Date().setMinutes(new Date().getMinutes() - 5));
     const findOperator = Between(dateThen, dateNow);
     return await Item.find({
       where: {
@@ -91,6 +91,16 @@ export class Channel extends BaseEntity {
     const client = new WebClient(this.team.botToken);
 
     const response = await client.reactions.add({
+      channel: this.slackId,
+      name: "white_check_mark",
+      timestamp: ts,
+    });
+  }
+
+  public async removeReactionFromMessage(ts: string) {
+    const client = new WebClient(this.team.botToken);
+
+    const response = await client.reactions.remove({
       channel: this.slackId,
       name: "white_check_mark",
       timestamp: ts,

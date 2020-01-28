@@ -18,7 +18,9 @@ export class InteractiveMessageController {
           case "complete_item":
             await interactiveMsg.completeItem();
             break;
-          case "vague":
+          case "undo":
+            await interactiveMsg.undoCompleteItem();
+            break;
 
           default:
             break;

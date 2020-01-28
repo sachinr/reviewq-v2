@@ -1,4 +1,4 @@
-import SlackTypes, { AttachmentAction } from "@slack/types";
+import SlackTypes, { AttachmentAction, MessageAttachment } from "@slack/types";
 import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
 import nodeFetch from "node-fetch";
 import { Channel } from "./Channel";
@@ -169,10 +169,16 @@ export class Message {
 
   private async getPaginationInfo(start: number, reverse: boolean) {
     let openItems = await this.channel.openItems();
+    const recentlyClosedItems = await this.channel.recentlyClosed();
+
+    openItems = openItems.concat(recentlyClosedItems);
+    openItems = openItems.sort((a, b) => {
+      return a.id <= b.id ? -1 : 1;
+    });
     openItems = reverse ? openItems.reverse() : openItems;
 
     const totalItems = openItems.length;
-    const totalPages = Math.ceil(totalItems / Message.PER_PAGE);
+    const totalPages = totalItems > 0 ? Math.ceil(totalItems / Message.PER_PAGE) : 1;
     const currentPage = Math.ceil(start / Message.PER_PAGE);
     let currentPageOpenItems: Item[] = [];
 
@@ -200,27 +206,43 @@ export class Message {
   private async buildMessageAttachment(start: number, reverse: boolean) {
     const paginationInfo = await this.getPaginationInfo(start, reverse);
     for (const currentItem of paginationInfo.currentPageOpenItems) {
-      const user = await currentItem.user;
-      this.attachments.push({
+      const user = currentItem.user;
+      const attachment = {
         author_name: user.fullName(),
         author_icon: user.avatar24,
         color: Message.SECONDARY_COLOR,
         text: currentItem.message,
-        footer: `<${currentItem.archiveLink}|Archive link>`,
         ts: currentItem.ts,
         fallback: "Mark as done",
-        callback_id: "complete_item",
         mrkdwn_in: ["text"],
-        actions: [{
+      } as MessageAttachment;
+
+      if (currentItem.complete) {
+        attachment.callback_id = "undo";
+        attachment.footer = `<${currentItem.archiveLink}|Archive link> | Completed by <@${currentItem.completedBy.slackId}>`;
+        attachment.actions = [{
+          name: "undo",
+          text: ":arrow_right_hook: Undo",
+          type: "button",
+          value: JSON.stringify({ itemId: currentItem.id, itemTs: currentItem.ts, start, reverse } as ICompleteButton),
+        }];
+      } else {
+        attachment.callback_id = "complete_item";
+        attachment.footer = `<${currentItem.archiveLink}|Archive link>`;
+        attachment.actions = [{
           name: "complete",
           text: ":pencil: Mark as done",
           type: "button",
           value: JSON.stringify({ itemId: currentItem.id, itemTs: currentItem.ts, start, reverse } as ICompleteButton),
-        }],
-      });
-    }
+        }];
+      }
 
-    this.addPaginationButtons(paginationInfo);
+      this.attachments.push(attachment);
+      }
+
+    if (paginationInfo.totalItems > 0) {
+      this.addPaginationButtons(paginationInfo);
+    }
 
     return this;
   }

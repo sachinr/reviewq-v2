@@ -129,6 +129,14 @@ export class Item extends BaseEntity {
     this.reload();
   }
 
+  public async markNotComplete() {
+    this.complete = false;
+    this.completedBy = null;
+    this.dateCompleted = null;
+    await this.save();
+    this.reload();
+  }
+
   private async cleanMessage(teamId: number) {
     const team = await Team.findOne(teamId);
 

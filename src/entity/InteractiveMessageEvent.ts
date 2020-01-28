@@ -83,6 +83,17 @@ export class InteractiveMessageEvent {
     await this.channel.addReactionToMessage(completionInfo.itemTs);
   }
 
+  public async undoCompleteItem() {
+    await this.findOrCreateSlackObjects();
+    const completionInfo = JSON.parse(this.initiatingAction.value) as ICompleteButton;
+    // TODO: Verify that interactiveMessage can't be spoofed
+    const item = await Item.findOne(completionInfo.itemId);
+    await item.markNotComplete();
+    await this.channel.postItemsList(completionInfo.start,
+      completionInfo.reverse, this.response_url);
+    await this.channel.removeReactionFromMessage(completionInfo.itemTs);
+  }
+
   public async paginate() {
     await this.findOrCreateSlackObjects();
     const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;

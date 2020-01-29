@@ -31,6 +31,7 @@ export interface ICompleteButton {
 export class Message {
   private static PRIMARY_COLOR = "#9469df";
   private static SECONDARY_COLOR = "#dbaaaa";
+  private static ERROR_COLOR = "#DD3E1C";
   private static PER_PAGE = 3;
 
   // tslint:disable: variable-name
@@ -62,8 +63,14 @@ export class Message {
     }
   }
 
-  public addErrorMessage() {
+  public addErrorMessage(text: string) {
     this.text = "Oops! Something went wrong.";
+    this.attachments.push({
+      color: Message.ERROR_COLOR,
+      text,
+      fallback: text,
+      callback_id: "error_message",
+    });
     return this;
   }
 
@@ -96,6 +103,10 @@ export class Message {
     this.replace_original = true;
 
     return this;
+  }
+
+  public async addInvitePrompt() {
+    this.attachments.push({text: `*Tip*: Invite <@${this.channel.team.botSlackId}> to this channel to make it easier to manage your queue.`});
   }
 
   public async addOpenItems(start: number, reverse: boolean) {

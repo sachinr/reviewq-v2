@@ -40,7 +40,7 @@ export const setupChannel = (team: Team, isIm: boolean) => {
 export const setupItem = (channel: Channel, user: User) => {
   const item = new Item();
   item.channel = channel;
-  item.ts = "1234.123";
+  item.ts = "1234.123" + randomString();
   item.message = randomString();
   item.user = user;
 

@@ -1,5 +1,5 @@
 import { BaseEntity, BeforeInsert, Column, CreateDateColumn,
-  Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+  Entity, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from "typeorm";
 
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { Channel } from "./Channel";
@@ -29,27 +29,52 @@ interface ITeamInfoResult extends WebAPICallResult {
 }
 
 @Entity()
+@Unique(["channelId", "ts"])
 export class Item extends BaseEntity {
 
-  public static async saveFromEvent(slackEvent: Event) {
-    const item = new Item();
-    item.user = slackEvent.user;
-    item.channel = slackEvent.channel;
-    item.ts = slackEvent.event.ts;
-    item.message = slackEvent.event.text;
-    await item.cleanMessage(slackEvent.user.teamId);
-    await item.save();
+  public static async createFromEvent(slackEvent: Event) {
+    let item = await Item.findOne({
+      where: { channelId: slackEvent.channel.id, ts: slackEvent.event.ts },
+    });
+
+    if (item) {
+      if (item.complete) {
+        await item.markNotComplete();
+        await item.save();
+      }
+    } else {
+      item = new Item();
+      item.user = slackEvent.user;
+      item.channel = slackEvent.channel;
+      item.ts = slackEvent.event.ts;
+      item.message = slackEvent.event.text;
+      await item.cleanMessage(slackEvent.user.teamId);
+      await item.save();
+    }
+
     return item;
   }
 
-  public static async saveFromInteractiveMessage(slackEvent: InteractiveMessageEvent) {
-    const item = new Item();
-    item.user = slackEvent.user;
-    item.channel = slackEvent.channel;
-    item.ts = slackEvent.message.ts;
-    item.message = slackEvent.message.text;
-    await item.cleanMessage(slackEvent.user.teamId);
-    await item.save();
+  public static async createFromInteractiveMessage(slackEvent: InteractiveMessageEvent) {
+    let item = await Item.findOne({
+      where: { channelId: slackEvent.channel.id, ts: slackEvent.message.ts },
+    });
+
+    if (item) {
+      if (item.complete) {
+        await item.markNotComplete();
+        await item.save();
+      }
+    } else {
+      item = new Item();
+      item.user = slackEvent.user;
+      item.channel = slackEvent.channel;
+      item.ts = slackEvent.message.ts;
+      item.message = slackEvent.message.text;
+      await item.cleanMessage(slackEvent.user.teamId);
+      await item.save();
+    }
+
     return item;
   }
 
@@ -147,6 +172,7 @@ export class Item extends BaseEntity {
     this.dateCompleted = null;
     await this.save();
     this.reload();
+    this.channel.removeReactionFromMessage(this.ts);
   }
 
   private async cleanMessage(teamId: number) {

@@ -63,7 +63,7 @@ test("create from event", async () => {
   };
   await slackEvent.findOrCreateSlackObjects();
 
-  const item = await Item.saveFromEvent(slackEvent);
+  const item = await Item.createFromEvent(slackEvent);
   expect(item.channel.id).toBe(1);
 });
 
@@ -83,24 +83,24 @@ test("cleans message", async () => {
   };
   await slackEvent.findOrCreateSlackObjects();
 
-  const item = await Item.saveFromEvent(slackEvent);
+  const item = await Item.createFromEvent(slackEvent);
   expect(item.message).toBe("something");
 
   slackEvent.event.text = "Add something";
   slackEvent.event.ts = "12345";
-  const item2 = await Item.saveFromEvent(slackEvent);
+  const item2 = await Item.createFromEvent(slackEvent);
 
   expect(item2.message).toBe("something");
 
   slackEvent.event.text = `<@${(team.botSlackId)}> add something`;
   slackEvent.event.ts = "123456";
-  const item3 = await Item.saveFromEvent(slackEvent);
+  const item3 = await Item.createFromEvent(slackEvent);
 
   expect(item3.message).toBe("something");
 
   slackEvent.event.text = `<@${(team.botSlackId)}> something`;
   slackEvent.event.ts = "1234567";
-  const item4 = await Item.saveFromEvent(slackEvent);
+  const item4 = await Item.createFromEvent(slackEvent);
 
   expect(item4.message).toBe("something");
 });

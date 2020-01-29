@@ -137,7 +137,7 @@ export class Event {
   }
 
   private async addItemAndNotify() {
-    const item = await Item.saveFromEvent(this);
+    const item = await Item.createFromEvent(this);
     await item.notify("created");
   }
 

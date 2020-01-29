@@ -92,7 +92,7 @@ export class InteractiveMessageEvent {
 
   public async addItemAndNotify() {
     await this.findOrCreateSlackObjects();
-    const item = await Item.saveFromInteractiveMessage(this);
+    const item = await Item.createFromInteractiveMessage(this);
     await item.channel.join();
     await item.notify("created", this.response_url);
   }

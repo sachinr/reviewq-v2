@@ -138,13 +138,16 @@ export class Channel extends BaseEntity {
     }
   }
 
-  public async postError(error?: string) {
-    const message = new Message(this).addErrorMessage().post();
+  public async postError(errorMessage: string, url?: string) {
+    const message = new Message(this).addErrorMessage(errorMessage).post(url);
   }
 
   public async postInfo(preText: string, url?: string) {
     const message = new Message(this);
     await message.addSummary(preText);
+    if (!this.isMember) {
+      message.addInvitePrompt();
+    }
     await message.post(url);
   }
 

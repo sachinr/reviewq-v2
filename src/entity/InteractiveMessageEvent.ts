@@ -45,7 +45,7 @@ export class InteractiveMessageEvent {
   public constructor(interactiveMessagePayload: object) {
     Object.assign(this, interactiveMessagePayload);
     if (this.actions) {
-      this.initiatingAction = this.actions?.[0];
+      this.initiatingAction = this.actions[0];
     } else {
       this.initiatingAction = { name: "Message Action", type: "Message Action", value: "Message Action" };
     }
@@ -105,7 +105,6 @@ export class InteractiveMessageEvent {
     await item.markComplete(this.user);
     await this.channel.postItemsList(completionInfo.start,
       completionInfo.reverse, this.response_url);
-    await this.channel.addReactionToMessage(completionInfo.itemTs);
   }
 
   public async undoCompleteItem() {

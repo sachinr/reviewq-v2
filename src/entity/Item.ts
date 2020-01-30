@@ -163,7 +163,9 @@ export class Item extends BaseEntity {
     this.completedBy = completionUser;
     this.dateCompleted = new Date();
     await this.save();
-    this.reload();
+    if (this.channel.isMember) {
+      await this.channel.addReactionToMessage(this.ts);
+    }
   }
 
   public async markNotComplete() {
@@ -171,7 +173,6 @@ export class Item extends BaseEntity {
     this.completedBy = null;
     this.dateCompleted = null;
     await this.save();
-    this.reload();
     this.channel.removeReactionFromMessage(this.ts);
   }
 

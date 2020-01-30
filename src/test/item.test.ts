@@ -137,3 +137,15 @@ test("notify", async () => {
     text: `${item.archiveLink} was marked as complete by <@${user2.slackId}>`,
   });
 });
+
+test("createFromInteractiveMessage", async () => {
+  expect(1).toBe(2);
+});
+
+test("createArchiveLink", async () => {
+  expect(1).toBe(2);
+});
+
+test("markNotComplete", async () => {
+  expect(1).toBe(2);
+});

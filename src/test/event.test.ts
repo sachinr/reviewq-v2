@@ -139,3 +139,15 @@ test("processes message events", async () => {
   await slackEvent.processMessageEvent();
   expect(spy).toBeCalledTimes(1);
 });
+
+test("isMessageType", async () => {
+  expect(1).toBe(2);
+});
+
+test("isMemberJoined", async () => {
+  expect(1).toBe(2);
+});
+
+test("findUserCommands", async () => {
+  expect(1).toBe(2);
+});

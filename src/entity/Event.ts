@@ -16,14 +16,14 @@ interface ISlackEventBody {
 }
 
 interface ISlackEventAttachment {
-    fallback: string;
-    text: string;
-    title: string;
-    id: number;
-    color: string;
-    mrkdwn_in: string[];
-    from_url: string;
-    is_share: boolean;
+  fallback: string;
+  text: string;
+  title: string;
+  id: number;
+  color: string;
+  mrkdwn_in: string[];
+  from_url: string;
+  is_share: boolean;
 }
 
 export class Event {

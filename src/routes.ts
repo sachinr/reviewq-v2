@@ -1,3 +1,4 @@
+import { CommandController } from "./controller/CommandController";
 import { EventController } from "./controller/EventController";
 import { IndexController } from "./controller/IndexController";
 import { InteractiveMessageController } from "./controller/InteractiveMessageController";
@@ -23,5 +24,10 @@ export const Routes = [{
   controller: InteractiveMessageController,
   method: "post",
   route: "/interactive-message",
+}, {
+  action: "commands",
+  controller: CommandController,
+  method: "post",
+  route: "/commands",
 },
 ];

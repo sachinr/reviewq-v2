@@ -5,8 +5,6 @@ import { verifySignature } from "../helpers/slackVerificationHelper";
 
 export class EventController {
   public async event(request: Request, response: Response, next: NextFunction) {
-    // tslint:disable-next-line: no-console
-    console.log(request.body);
     if (verifySignature(request)) {
       switch (request.body.type) {
         case "url_verification":

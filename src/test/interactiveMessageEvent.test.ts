@@ -85,7 +85,7 @@ test("undoCompleteItem", async () => {
   const team = await setupTeam().save();
   const channel = await setupChannel(team, false).save();
   const user = await setupUser(team).save();
-  const item = setupItem(channel, user)
+  const item = setupItem(channel, user);
   item.complete = true;
   await item.save();
   const completeButtonValue = {
@@ -107,6 +107,36 @@ test("undoCompleteItem", async () => {
   expect(item.complete).toBe(false);
 });
 
-// test("paginate", async () => {
-//   expect(1).toBe(2);
-// });
+test("paginate - close list", async () => {
+  const closeButtonValue = {
+    reverse: false,
+    start: 1,
+    text: "close",
+  };
+  const action = { name: "name", type: "type", value: JSON.stringify(closeButtonValue) };
+  const event = new InteractiveMessageEvent({ actions: [action] });
+  event.channel = new Channel();
+  event.channel.deleteMessage = jest.fn();
+  event.findOrCreateSlackObjects = jest.fn();
+  event.message_ts = "message_ts";
+  event.response_url = "response_url";
+  await event.paginate();
+  expect(event.channel.deleteMessage).toBeCalledTimes(1);
+  expect(event.channel.deleteMessage).toBeCalledWith("message_ts", "response_url");
+});
+
+test("paginate - next or previous", async () => {
+  const paginationButtonValue = {
+    reverse: false,
+    start: 1,
+    text: "Next",
+  };
+  const action = { name: "name", type: "type", value: JSON.stringify(paginationButtonValue) };
+  const event = new InteractiveMessageEvent({ actions: [action] });
+  event.channel = new Channel();
+  event.channel.postItemsList = jest.fn();
+  event.response_url = "response_url";
+  await event.paginate();
+  expect(event.channel.postItemsList).toBeCalledTimes(1);
+  expect(event.channel.postItemsList).toBeCalledWith(1, false, "response_url");
+});

@@ -124,6 +124,9 @@ export class Event {
           case "atMentionList":
             this.channel.postItemsList(1, false);
             break;
+          case "atMentionHelp":
+            this.channel.postHelpMessage();
+            break;
           case "other":
             if (this.event.channel[0] === "D") {
               this.channel.postHelpMessage();
@@ -144,6 +147,7 @@ export class Event {
   private userCommands() {
     return {
       atMentionAdd: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> add`),
+      atMentionHelp: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> help`),
       atMentionList: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> list`),
       directAdd: /^add/,
       directList: /^list/,

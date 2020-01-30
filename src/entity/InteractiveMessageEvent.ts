@@ -121,7 +121,7 @@ export class InteractiveMessageEvent {
   public async paginate() {
     await this.findOrCreateSlackObjects();
     const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;
-    if (paginationInfo.text === "Close") {
+    if (paginationInfo.text.toLowerCase() === "close") {
       this.channel.deleteMessage(this.message_ts, this.response_url);
     } else {
       this.channel.postItemsList(paginationInfo.start,

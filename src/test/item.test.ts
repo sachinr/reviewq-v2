@@ -9,6 +9,7 @@ import { Team } from "../entity/Team";
 import { User } from "../entity/User";
 
 import { WebClient } from "@slack/web-api";
+import { InteractiveMessageEvent } from "../entity/InteractiveMessageEvent";
 
 const postMessage = jest.fn();
 
@@ -21,6 +22,7 @@ jest.mock("@slack/web-api", () => ({
           return { ok: true, channel: { is_channel: true } };
         }),
       },
+      reactions: { add: jest.fn(), remove: jest.fn() },
       team: {
         info: jest.fn(() => {
           return { ok: true, team: { domain: "testsuite.com" } };
@@ -138,14 +140,74 @@ test("notify", async () => {
   });
 });
 
-test("createFromInteractiveMessage", async () => {
-  expect(1).toBe(2);
+test("createFromInteractiveMessage - new item", async () => {
+  const event = new InteractiveMessageEvent({});
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  const user = await setupUser(team).save();
+
+  event.channel = channel;
+  event.user = user;
+  event.message = { type: "", text: "message_text", user: "", ts: "message_ts", team: "", blocks: []};
+
+  const item = await Item.createFromInteractiveMessage(event);
+  expect(item.channel).toStrictEqual(channel);
+  expect(item.user).toStrictEqual(user);
+  expect(item.message).toBe("message_text");
+  expect(item.ts).toBe("message_ts");
+});
+
+test("createFromInteractiveMessage - previously closed item", async () => {
+  const event = new InteractiveMessageEvent({});
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  const user = await setupUser(team).save();
+  const item = await setupItem(channel, user).save();
+  await item.markComplete(user);
+
+  event.channel = channel;
+  event.message = { type: "", text: "", user: "", ts: item.ts, team: "", blocks: []};
+
+  const item2 = await Item.createFromInteractiveMessage(event);
+  expect(item.id).toBe(item2.id);
+  expect(item2.complete).toBe(false);
+});
+
+test("createFromInteractiveMessage - currently open item", async () => {
+  const event = new InteractiveMessageEvent({});
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  const user = await setupUser(team).save();
+  const item = await setupItem(channel, user).save();
+
+  event.channel = channel;
+  event.message = { type: "", text: "", user: "", ts: item.ts, team: "", blocks: []};
+
+  const item2 = await Item.createFromInteractiveMessage(event);
+  expect(item.id).toBe(item2.id);
+  expect(item2.complete).toBe(false);
 });
 
 test("createArchiveLink", async () => {
-  expect(1).toBe(2);
+  const event = new InteractiveMessageEvent({});
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  const user = await setupUser(team).save();
+  const item = setupItem(channel, user);
+
+  item.archiveLink = undefined;
+  await item.save();
+  expect(item.archiveLink).toBe(`https://testsuite.com.slack.com/archives/${channel.slackId}/p${item.ts.replace(".", "")}`);
 });
 
 test("markNotComplete", async () => {
-  expect(1).toBe(2);
+  const event = new InteractiveMessageEvent({});
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  const user = await setupUser(team).save();
+  const item = await setupItem(channel, user).save();
+
+  await item.markComplete(user);
+  expect(item.complete).toBeTruthy();
+  expect(item.completedBy).toStrictEqual(user);
 });

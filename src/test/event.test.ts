@@ -141,13 +141,111 @@ test("processes message events", async () => {
 });
 
 test("isMessageType", async () => {
-  expect(1).toBe(2);
+  const event = new Event();
+  event.event = {
+    attachments: [],
+    channel: "",
+    event_ts: "",
+    text: "",
+    ts: "",
+    type: "message",
+    user: "",
+  };
+  expect(event.isMessageType()).toBeTruthy();
+  event.event.subtype = "message_changed";
+  expect(event.isMessageType()).toBeFalsy();
+  event.event.type = "app_mention";
+  expect(event.isMessageType()).toBeTruthy();
 });
 
 test("isMemberJoined", async () => {
-  expect(1).toBe(2);
+  const team = setupTeam();
+  team.botSlackId = "bot_slack_id";
+  const event = new Event();
+  event.team = team;
+  event.event = {
+    attachments: [],
+    channel: "",
+    event_ts: "",
+    text: "",
+    ts: "",
+    type: "member_joined_channel",
+    user: "bot_slack_id",
+  };
+  expect(event.isMemberJoined()).toBeTruthy();
+  event.event.user = "someone_else";
+  expect(event.isMemberJoined()).toBeFalsy();
 });
 
 test("findUserCommands", async () => {
-  expect(1).toBe(2);
+  const team = setupTeam();
+  team.botSlackId = "bot_slack_id";
+  const event = new Event();
+  event.team = team;
+  event.event = {
+    attachments: [],
+    channel: "",
+    event_ts: "",
+    text: "AdD something",
+    ts: "",
+    type: "message",
+    user: "",
+  };
+  expect(event.findUserCommand()).toBe("directAdd");
+  event.event.text = "<@bot_slack_id> add something";
+  expect(event.findUserCommand()).toBe("atMentionAdd");
+  event.event.text = "list items";
+  expect(event.findUserCommand()).toBe("directList");
+  event.event.text = "<@bot_slack_id> list something";
+  expect(event.findUserCommand()).toBe("atMentionList");
+  event.event.text = "gobbledy gook";
+  expect(event.findUserCommand()).toBe("other");
+});
+
+test("posts help in channel", async () => {
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  channel.postHelpMessage = jest.fn();
+  team.botSlackId = "bot_slack_id";
+
+  const event = new Event();
+  event.findOrCreateSlackObjects = jest.fn();
+  event.team = team;
+  event.channel = channel;
+  event.event = {
+    attachments: [],
+    channel: "",
+    event_ts: "",
+    text: "<@bot_slack_id> help",
+    ts: "",
+    type: "message",
+    user: "",
+  };
+  await event.processMessageEvent();
+  expect(event.findUserCommand()).toBe("atMentionHelp");
+  expect(channel.postHelpMessage).toBeCalledTimes(1);
+});
+
+test("posts help in DM", async () => {
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, true).save();
+  channel.postHelpMessage = jest.fn();
+  team.botSlackId = "bot_slack_id";
+
+  const event = new Event();
+  event.findOrCreateSlackObjects = jest.fn();
+  event.team = team;
+  event.channel = channel;
+  event.event = {
+    attachments: [],
+    channel: channel.slackId,
+    event_ts: "",
+    text: "help",
+    ts: "",
+    type: "message",
+    user: "",
+  };
+  await event.processMessageEvent();
+  expect(event.findUserCommand()).toBe("other");
+  expect(channel.postHelpMessage).toBeCalledTimes(1);
 });

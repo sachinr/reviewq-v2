@@ -71,7 +71,6 @@ export class Item extends BaseEntity {
       item.channel = slackEvent.channel;
       item.ts = slackEvent.message.ts;
       item.message = slackEvent.message.text;
-      await item.cleanMessage(slackEvent.user.teamId);
       await item.save();
     }
 
@@ -166,6 +165,8 @@ export class Item extends BaseEntity {
     if (this.channel.isMember) {
       await this.channel.addReactionToMessage(this.ts);
     }
+
+    return this;
   }
 
   public async markNotComplete() {
@@ -174,6 +175,8 @@ export class Item extends BaseEntity {
     this.dateCompleted = null;
     await this.save();
     this.channel.removeReactionFromMessage(this.ts);
+
+    return this;
   }
 
   private async cleanMessage(teamId: number) {

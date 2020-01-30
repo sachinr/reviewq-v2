@@ -210,4 +210,8 @@ test("markNotComplete", async () => {
   await item.markComplete(user);
   expect(item.complete).toBeTruthy();
   expect(item.completedBy).toStrictEqual(user);
+
+  await item.markNotComplete();
+  expect(item.complete).toBeFalsy();
+  expect(item.completedBy).toBeNull();
 });

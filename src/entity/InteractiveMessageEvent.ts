@@ -20,6 +20,18 @@ interface IInteractiveMessageMessage {
   ts: string;
   team: string;
   blocks: Block[];
+  files: IInteractiveMessageFile[];
+}
+
+export interface IInteractiveMessageFile {
+  id: string;
+  name: string;
+  title: string;
+  filetype: string;
+  pretty_type: string;
+  user: string;
+  url_private: string;
+  preview: string;
 }
 
 export class InteractiveMessageEvent {
@@ -127,6 +139,24 @@ export class InteractiveMessageEvent {
       this.channel.postItemsList(paginationInfo.start,
         paginationInfo.reverse, this.response_url);
     }
+  }
+
+  public async topLevelActions() {
+    await this.findOrCreateSlackObjects();
+    switch (this.initiatingAction.name.toLowerCase()) {
+      case "close":
+        this.channel.deleteMessage(this.message_ts, this.response_url);
+        break;
+      case "all":
+        this.channel.postItemsList(1, false, this.response_url);
+        break;
+      case "add":
+        this.channel.openNewItemModal(this.trigger_id);
+        break;
+      default:
+        break;
+    }
+
   }
 
 }

@@ -79,23 +79,22 @@ export class Message {
     const itemPluralized = count > 1 ? `are ${count} items` : `is ${count} item`;
     this.text = `There ${itemPluralized} in the queue`;
     this.text = preText.length > 0 ? `${preText}\n${this.text}` : this.text;
+    const actions = [];
+    if (count > 0) {
+      actions.push({
+        name: "All",
+        text: "View all",
+        type: "button",
+        value: "all",
+      });
+    }
+
+    actions.push({ name: "Add", text: "Add", type: "button", value: "add" });
+    actions.push({ name: "Close", text: "Close", type: "button", value: "close" });
 
     this.attachments.push({
-      actions: [
-        {
-          name: "All",
-          text: "View all",
-          type: "button",
-          value: JSON.stringify({ text: "All", start: 1, reverse: false }),
-        },
-        {
-          name: "Close",
-          text: "Close",
-          type: "button",
-          value: JSON.stringify({ text: "Close" }),
-        },
-      ],
-      callback_id: "pagination",
+      actions: actions as AttachmentAction[],
+      callback_id: "top_level_actions",
       color: Message.PRIMARY_COLOR,
       fallback: "FALLBACK",
     });

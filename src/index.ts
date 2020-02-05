@@ -25,6 +25,7 @@ createConnection().then(async (connection) => {
   // setup express app here
   app.use(bodyParser.urlencoded({ verify: rawBodySaver, extended: true }));
   app.use(bodyParser.json({ verify: rawBodySaver }));
+  app.use(express.static("public"));
 
   // register express routes from defined application routes
   Routes.forEach((route) => {

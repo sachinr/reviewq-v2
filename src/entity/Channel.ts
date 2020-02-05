@@ -6,6 +6,7 @@ import { BaseEntity, BeforeInsert, BeforeUpdate, Between, Column,
 import { Item } from "./Item";
 import { Message } from "./Message";
 import { Team } from "./Team";
+import { View } from "./View";
 
 interface IConversationInfoResult extends WebAPICallResult {
   channel: {
@@ -136,6 +137,14 @@ export class Channel extends BaseEntity {
       const result = await nodeFetch(url, { method: "post", body: JSON.stringify({ delete_original: true }) });
       return result.ok;
     }
+  }
+
+  public async openNewItemModal(triggerId: string) {
+    const client = new WebClient((this.team).botToken);
+    const view = new View(this);
+    view.addNewItemForm();
+    const result = await view.open(triggerId);
+    return result.ok;
   }
 
   public async postError(errorMessage: string, url?: string) {

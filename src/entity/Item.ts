@@ -4,7 +4,7 @@ import { BaseEntity, BeforeInsert, Column, CreateDateColumn,
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { Channel } from "./Channel";
 import { Event } from "./Event";
-import { InteractiveMessageEvent } from "./InteractiveMessageEvent";
+import { IInteractiveMessageFile, InteractiveMessageEvent } from "./InteractiveMessageEvent";
 import { Message } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
@@ -71,6 +71,11 @@ export class Item extends BaseEntity {
       item.channel = slackEvent.channel;
       item.ts = slackEvent.message.ts;
       item.message = slackEvent.message.text;
+      if (slackEvent.message.files) {
+        slackEvent.message.files.forEach((file) => {
+          item.message = `${item.message || ""}\n*${file.name || file.title}*`;
+        });
+      }
       await item.save();
     }
 
@@ -125,12 +130,14 @@ export class Item extends BaseEntity {
   @BeforeInsert()
   public async createArchiveLink() {
     if (!this.archiveLink) {
-      const channel = await Channel.findOne(this.channelId);
-      const client = new WebClient(channel.team.botToken);
+      if (!this.channel) {
+        this.channel = await Channel.findOne(this.channelId);
+      }
+      const client = new WebClient(this.channel.team.botToken);
       const response = await client.team.info() as ITeamInfoResult;
       if (response.ok) {
         const domain = response.team.domain;
-        this.archiveLink = `https://${domain}.slack.com/archives/${channel.slackId}/p${this.ts.replace(".", "")}`;
+        this.archiveLink = `https://${domain}.slack.com/archives/${this.channel.slackId}/p${this.ts.replace(".", "")}`;
       }
     }
   }

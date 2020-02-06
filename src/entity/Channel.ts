@@ -3,6 +3,7 @@ import nodeFetch from "node-fetch";
 import { BaseEntity, BeforeInsert, BeforeUpdate, Between, Column,
   Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
 
+import { ISlackMessage } from "./Event";
 import { Item } from "./Item";
 import { Message } from "./Message";
 import { Team } from "./Team";
@@ -29,6 +30,12 @@ interface IConversationInfoResult extends WebAPICallResult {
     is_private: boolean;
     is_mpim: boolean;
   };
+}
+
+interface IReactionGetResult extends WebAPICallResult {
+  type: string;
+  channel: string;
+  message: ISlackMessage;
 }
 
 @Unique(["slackId", "teamId"])
@@ -116,7 +123,7 @@ export class Channel extends BaseEntity {
 
   public async recentlyClosed(): Promise<Item[]> {
     const dateNow = new Date();
-    const dateThen = new Date(new Date().setMinutes(new Date().getMinutes() - 5));
+    const dateThen = new Date(new Date().setMinutes(new Date().getMinutes() - 1));
     const findOperator = Between(dateThen, dateNow);
     return await Item.find({
       where: {
@@ -213,6 +220,17 @@ export class Channel extends BaseEntity {
       const response = await client.conversations.join({
       channel: this.slackId,
       });
+    }
+  }
+
+  public async fetchMessage(ts: string): Promise<Message> {
+    const client = new WebClient(this.team.botToken);
+    const response = await client.reactions.get({
+      channel: this.slackId,
+      timestamp: ts,
+    }) as IReactionGetResult;
+    if (response.ok) {
+      return new Message(this, response.message);
     }
   }
 }

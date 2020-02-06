@@ -3,8 +3,8 @@ import { BaseEntity, BeforeInsert, Column, CreateDateColumn,
 
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { Channel } from "./Channel";
-import { Event } from "./Event";
-import { IInteractiveMessageFile, InteractiveMessageEvent } from "./InteractiveMessageEvent";
+import { Event, ISlackFile } from "./Event";
+import { InteractiveMessageEvent } from "./InteractiveMessageEvent";
 import { Message } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
@@ -49,6 +49,14 @@ export class Item extends BaseEntity {
       item.ts = slackEvent.event.ts;
       item.message = slackEvent.event.text;
       await item.cleanMessage(slackEvent.user.teamId);
+      item.addFileNamesToMessage(slackEvent.event.files);
+
+      if (item.message.length === 0 && slackEvent.event.thread_ts) {
+        const parentMessage = await slackEvent.channel.fetchMessage(slackEvent.event.thread_ts);
+        item.message = parentMessage.text;
+        item.addFileNamesToMessage(parentMessage.files);
+      }
+
       await item.save();
     }
 
@@ -71,11 +79,7 @@ export class Item extends BaseEntity {
       item.channel = slackEvent.channel;
       item.ts = slackEvent.message.ts;
       item.message = slackEvent.message.text;
-      if (slackEvent.message.files) {
-        slackEvent.message.files.forEach((file) => {
-          item.message = `${item.message || ""}\n*${file.name || file.title}*`;
-        });
-      }
+      item.addFileNamesToMessage(slackEvent.message.files);
       await item.save();
     }
 
@@ -184,6 +188,14 @@ export class Item extends BaseEntity {
     this.channel.removeReactionFromMessage(this.ts);
 
     return this;
+  }
+
+  public addFileNamesToMessage(files: ISlackFile[]) {
+    if (files) {
+      files.forEach((file) => {
+        this.message = `${this.message || ""}\n*<${file.permalink}|${file.name || file.title}>*`;
+      });
+    }
   }
 
   private async cleanMessage(teamId: number) {

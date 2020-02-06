@@ -25,8 +25,6 @@ export class InteractiveMessageController {
             await interactiveMsg.undoCompleteItem();
             break;
           case "message_action_add":
-            // tslint:disable-next-line: no-console
-            console.log(interactiveMsg.message);
             await interactiveMsg.addItemAndNotify();
             break;
 

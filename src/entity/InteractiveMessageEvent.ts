@@ -1,6 +1,5 @@
-import { Block } from "@slack/web-api";
-
 import { Channel } from "./Channel";
+import { ISlackMessage } from "./Event";
 import { Item } from "./Item";
 import { ICompleteButton, IPaginationButton } from "./Message";
 import { Team } from "./Team";
@@ -13,27 +12,6 @@ interface IAction {
   value: string;
 }
 
-interface IInteractiveMessageMessage {
-  type: string;
-  text: string;
-  user: string;
-  ts: string;
-  team: string;
-  blocks: Block[];
-  files: IInteractiveMessageFile[];
-}
-
-export interface IInteractiveMessageFile {
-  id: string;
-  name: string;
-  title: string;
-  filetype: string;
-  pretty_type: string;
-  user: string;
-  url_private: string;
-  preview: string;
-}
-
 export class InteractiveMessageEvent {
   public type: string;
   public actions: IAction[];
@@ -43,7 +21,7 @@ export class InteractiveMessageEvent {
   public user_id: string;
   public action_ts: string;
   public message_ts: string;
-  public message?: IInteractiveMessageMessage;
+  public message?: ISlackMessage;
   public attachment_id: string;
   public is_app_unfurl: boolean;
   public response_url: string;
@@ -149,9 +127,6 @@ export class InteractiveMessageEvent {
         break;
       case "all":
         this.channel.postItemsList(1, false, this.response_url);
-        break;
-      case "add":
-        this.channel.openNewItemModal(this.trigger_id);
         break;
       default:
         break;

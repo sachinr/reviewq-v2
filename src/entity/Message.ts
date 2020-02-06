@@ -1,7 +1,9 @@
-import SlackTypes, { AttachmentAction, MessageAttachment } from "@slack/types";
+import { AttachmentAction, Block, MessageAttachment } from "@slack/types";
+
 import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
 import nodeFetch from "node-fetch";
 import { Channel } from "./Channel";
+import { ISlackFile } from "./Event";
 import { Item } from "./Item";
 
 interface IPaginationInfo {
@@ -39,8 +41,9 @@ export class Message {
   public channel: Channel;
   public text: string;
   public as_user: boolean;
-  public attachments?: SlackTypes.MessageAttachment[];
-  public blocks?: SlackTypes.Block[];
+  public attachments?: MessageAttachment[];
+  public files?: ISlackFile[];
+  public blocks?: Block[];
   public icon_emoji?: string;
   public icon_url?: string;
   public link_names?: boolean;
@@ -76,7 +79,7 @@ export class Message {
 
   public async addSummary(preText: string = "") {
     const count = (await this.channel.openItems()).length;
-    const itemPluralized = count > 1 ? `are ${count} items` : `is ${count} item`;
+    const itemPluralized = count > 1 ? `are ${count} open items` : `is ${count} open item`;
     this.text = `There ${itemPluralized} in the queue`;
     this.text = preText.length > 0 ? `${preText}\n${this.text}` : this.text;
     const actions = [];
@@ -89,7 +92,6 @@ export class Message {
       });
     }
 
-    actions.push({ name: "Add", text: "Add", type: "button", value: "add" });
     actions.push({ name: "Close", text: "Close", type: "button", value: "close" });
 
     this.attachments.push({

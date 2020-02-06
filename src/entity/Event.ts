@@ -1,18 +1,40 @@
+import { Block } from "@slack/types";
+
 import { Channel } from "./Channel";
 import { Item } from "./Item";
 import { Team } from "./Team";
 import { User } from "./User";
 
   // tslint:disable: variable-name
-interface ISlackEventBody {
+export interface ISlackMessage {
   type: string;
+  text: string;
+  user: string;
+  ts: string;
+  team: string;
+  blocks: Block[];
+  files?: ISlackFile[];
+}
+
+export interface ISlackFile {
+  id: string;
+  name: string;
+  title: string;
+  filetype: string;
+  pretty_type: string;
+  user: string;
+  url_private: string;
+  preview: string;
+  permalink: string;
+  thumb_pdf: string;
+}
+
+interface ISlackEventBody extends ISlackMessage {
   subtype?: string;
   event_ts: string;
   channel: string;
-  user: string;
-  text: string;
-  ts: string;
   attachments?: ISlackEventAttachment[];
+  thread_ts?: string;
 }
 
 interface ISlackEventAttachment {

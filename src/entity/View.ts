@@ -20,7 +20,7 @@ export class View {
   public private_metadata?: string;
   public submit?: PlainTextElement;
   public title?: PlainTextElement;
-  public type: "home" | "modal";
+  public type?: "home" | "modal";
 
   public channel: Channel;
 

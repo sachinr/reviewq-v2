@@ -161,7 +161,7 @@ export class Channel extends BaseEntity {
   public async postInfo(preText: string, url?: string) {
     const message = new Message(this);
     await message.addSummary(preText);
-    if (!this.isMember) {
+    if (!this.isMember && this.type !== "im") {
       message.addInvitePrompt();
     }
     await message.post(url);

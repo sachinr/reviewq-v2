@@ -27,6 +27,7 @@ export interface ISlackFile {
   preview: string;
   permalink: string;
   thumb_pdf: string;
+  url_private_download?: string;
 }
 
 interface ISlackEventBody extends ISlackMessage {

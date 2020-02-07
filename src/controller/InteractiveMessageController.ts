@@ -11,25 +11,31 @@ export class InteractiveMessageController {
       const interactiveMsg = new InteractiveMessageEvent(payload);
       if (interactiveMsg.findTeam()) {
         response.send("");
-        switch (interactiveMsg.callback_id) {
-          case "top_level_actions":
-            await interactiveMsg.topLevelActions();
-            break;
-          case "pagination":
-            await interactiveMsg.paginate();
-            break;
-          case "complete_item":
-            await interactiveMsg.completeItem();
-            break;
-          case "undo":
-            await interactiveMsg.undoCompleteItem();
-            break;
-          case "message_action_add":
-            await interactiveMsg.addItemAndNotify();
-            break;
-
-          default:
-            break;
+        if (interactiveMsg.type === "block_actions") {
+          switch (interactiveMsg.initiatingAction.value) {
+            case "pagination":
+              await interactiveMsg.paginate();
+              break;
+            case "complete_item":
+              await interactiveMsg.completeItem();
+              break;
+            case "undo":
+              await interactiveMsg.undoCompleteItem();
+              break;
+            default:
+              break;
+          }
+        } else {
+          switch (interactiveMsg.callback_id) {
+            case "top_level_actions":
+              await interactiveMsg.topLevelActions();
+              break;
+            case "message_action_add":
+              await interactiveMsg.addItemAndNotify();
+              break;
+            default:
+              break;
+          }
         }
       } else {
         response.sendStatus(500);

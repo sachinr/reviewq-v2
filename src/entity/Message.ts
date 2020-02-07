@@ -1,19 +1,20 @@
-import { AttachmentAction, Block, MessageAttachment } from "@slack/types";
+import { AttachmentAction, Block, DividerBlock, MessageAttachment, SectionBlock } from "@slack/types";
 
 import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
 import nodeFetch from "node-fetch";
 import { Channel } from "./Channel";
 import { ISlackFile } from "./Event";
 import { Item } from "./Item";
+import { View } from "./View";
 
-interface IPaginationInfo {
-  openItems: Item[];
+export interface IPaginationInfo {
+  items: Item[];
   start: number;
   end: number;
   totalItems: number;
   totalPages: number;
   currentPage: number;
-  currentPageOpenItems: Item[];
+  currentPageItems: Item[];
   reverse: boolean;
 }
 
@@ -52,6 +53,7 @@ export class Message {
   public replace_original?: boolean;
   public reply_broadcast?: boolean;
   public thread_ts?: string;
+  public ts: string;
   public unfurl_links?: boolean;
   public unfurl_media?: boolean;
   public username?: string;
@@ -110,19 +112,13 @@ export class Message {
     this.attachments.push({text: `*Tip*: Invite <@${this.channel.team.botSlackId}> to this channel to make it easier to manage your queue.`});
   }
 
-  public async addOpenItems(start: number, reverse: boolean) {
-    await this.buildMessageAttachment(start, reverse);
+  public async addItems(items: Item[], start: number, reverse: boolean, summaryText?: string) {
+    const view = new View(this.channel);
+    await view.buildItemBlocks(items, start, reverse, summaryText);
     this.replace_original = true;
 
-    this.text = "Here are your messages (oldest to newest)";
-
-    if (this.attachments.length === 0) {
-      this.text = "There are no messages in the queue";
-    } else {
-      if (reverse) {
-        this.text = "Here are your messages (newest to oldest)";
-      }
-    }
+    this.text = summaryText;
+    this.blocks = this.blocks.concat(view.blocks);
 
     return this;
   }
@@ -170,29 +166,19 @@ export class Message {
   public async post(url?: string) {
     const args: any = Object.assign({}, this);
     args.channel = this.channel.slackId;
-
     if (url) {
-      const result = await nodeFetch(url, { method: "post", body: JSON.stringify(args) });
+      await nodeFetch(url, { method: "post", body: JSON.stringify(args) });
     } else {
       const client = new WebClient(this.channel.team.botToken);
-      const result = await client.chat.postMessage(args as ChatPostMessageArguments);
+      await client.chat.postMessage(args as ChatPostMessageArguments);
     }
   }
 
-  private async getPaginationInfo(start: number, reverse: boolean) {
-    let openItems = await this.channel.openItems();
-    const recentlyClosedItems = await this.channel.recentlyClosed();
-
-    openItems = openItems.concat(recentlyClosedItems);
-    openItems = openItems.sort((a, b) => {
-      return a.id <= b.id ? -1 : 1;
-    });
-    openItems = reverse ? openItems.reverse() : openItems;
-
-    const totalItems = openItems.length;
+  private async getPaginationInfo(items: Item[], start: number, reverse: boolean) {
+    const totalItems = items.length;
     const totalPages = totalItems > 0 ? Math.ceil(totalItems / Message.PER_PAGE) : 1;
     const currentPage = Math.ceil(start / Message.PER_PAGE);
-    let currentPageOpenItems: Item[] = [];
+    let currentPageItems: Item[] = [];
 
     let end = start + (Message.PER_PAGE - 1);
     if (end > totalItems) {
@@ -200,13 +186,13 @@ export class Message {
     }
 
     if (totalItems > 0) {
-      currentPageOpenItems = openItems.slice(start - 1, end);
+      currentPageItems = items.slice(start - 1, end);
     }
 
     return {
-      openItems,
+      items,
       currentPage,
-      currentPageOpenItems,
+      currentPageItems,
       end,
       start,
       totalItems,
@@ -215,9 +201,9 @@ export class Message {
     } as IPaginationInfo;
   }
 
-  private async buildMessageAttachment(start: number, reverse: boolean) {
-    const paginationInfo = await this.getPaginationInfo(start, reverse);
-    for (const currentItem of paginationInfo.currentPageOpenItems) {
+  private async buildMessageAttachment(items: Item[], start: number, reverse: boolean) {
+    const paginationInfo = await this.getPaginationInfo(items, start, reverse);
+    for (const currentItem of paginationInfo.currentPageItems) {
       const user = currentItem.user;
       const attachment = {
         author_name: user.fullName(),
@@ -228,6 +214,23 @@ export class Message {
         fallback: "Mark as done",
         mrkdwn_in: ["text"],
       } as MessageAttachment;
+
+      if (currentItem.filesJSON) {
+        const files: ISlackFile[] = JSON.parse(currentItem.filesJSON);
+        attachment.fields = [{
+          title: "Files:",
+          value: "",
+          short: false,
+        }];
+
+        for (const file of files) {
+          attachment.fields.push({
+            title: "",
+            value: `<${file.permalink}|${file.name || file.title}>`,
+            short: false,
+          });
+        }
+      }
 
       if (currentItem.complete) {
         attachment.callback_id = "undo";

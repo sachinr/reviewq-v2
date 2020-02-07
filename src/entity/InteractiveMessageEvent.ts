@@ -7,15 +7,22 @@ import { User } from "./User";
 
 // tslint:disable: variable-name
 interface IAction {
-  name: string;
+  name?: string;
   type: string;
   value: string;
+  action_id?: string;
+  block_id?: string;
+  text?: {
+    text: string;
+  };
+  action_ts?: string;
 }
 
 export class InteractiveMessageEvent {
   public type: string;
   public actions: IAction[];
-  public callback_id: string;
+  public callback_id?: string;
+  public block_id?: string;
   public team_id: string;
   public channel_id: string;
   public user_id: string;
@@ -89,7 +96,7 @@ export class InteractiveMessageEvent {
 
   public async completeItem() {
     await this.findOrCreateSlackObjects();
-    const completionInfo = JSON.parse(this.initiatingAction.value) as ICompleteButton;
+    const completionInfo = JSON.parse(this.initiatingAction.action_id) as ICompleteButton;
     // TODO: Verify that interactiveMessage can't be spoofed
     const item = await Item.findOne(completionInfo.itemId);
     await item.markComplete(this.user);
@@ -99,7 +106,7 @@ export class InteractiveMessageEvent {
 
   public async undoCompleteItem() {
     await this.findOrCreateSlackObjects();
-    const completionInfo = JSON.parse(this.initiatingAction.value) as ICompleteButton;
+    const completionInfo = JSON.parse(this.initiatingAction.action_id) as ICompleteButton;
     // TODO: Verify that interactiveMessage can't be spoofed
     const item = await Item.findOne(completionInfo.itemId);
     await item.markNotComplete();
@@ -110,7 +117,7 @@ export class InteractiveMessageEvent {
 
   public async paginate() {
     await this.findOrCreateSlackObjects();
-    const paginationInfo = JSON.parse(this.initiatingAction.value) as IPaginationButton;
+    const paginationInfo = JSON.parse(this.initiatingAction.action_id) as IPaginationButton;
     if (paginationInfo.text.toLowerCase() === "close") {
       this.channel.deleteMessage(this.message_ts, this.response_url);
     } else {

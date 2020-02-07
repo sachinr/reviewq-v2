@@ -78,6 +78,12 @@ export class User extends BaseEntity {
   @Column({ default: false })
   public isUltraRestricted: boolean;
 
+  @Column({ nullable: true })
+  public token: string;
+
+  @Column({ nullable: true })
+  public scope: string;
+
   @ManyToOne((type) => Team, (team) => team.users)
   public team: Team;
 

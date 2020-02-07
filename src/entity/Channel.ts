@@ -176,9 +176,31 @@ export class Channel extends BaseEntity {
 
   public async postItemsList(start: number, reverse: boolean, url?: string) {
     if (start === -1) { return this.postInfo("", url); }
-    const message = await new Message(this).addOpenItems(start, reverse);
 
-    await message.post(url);
+    const openItems = await this.openItems();
+    const closedItems = await this.recentlyClosed();
+
+    let items = (openItems).concat(closedItems);
+    items = items.sort((a, b) => {
+      return a.id <= b.id ? -1 : 1;
+    });
+    items = reverse ? items.reverse() : items;
+
+    let summaryText = "*There are no items in your queue.*";
+    if (items.length > 0 ) {
+      if (openItems.length > 0) {
+        summaryText = "*Here are the open items in your queue*";
+      } else {
+        if (closedItems.length > 0) {
+          summaryText = "*Here are the recently completed in your queue*";
+        }
+      }
+      summaryText = reverse ? summaryText + " (newest to oldest): " : summaryText + " (oldest to newest)";
+      const message = await new Message(this).addItems(items, start, reverse, summaryText);
+      await message.post(url);
+    } else {
+      this.postInfo("", url);
+    }
   }
 
   public async postHelpMessage() {

@@ -33,6 +33,16 @@ interface ITeamInfoResult extends WebAPICallResult {
 export class Item extends BaseEntity {
 
   public static async createFromEvent(slackEvent: Event) {
+    let cleanText = await Item.cleanMessage(slackEvent.event.text, slackEvent.user.teamId);
+
+    if (cleanText.length === 0 && slackEvent.event.thread_ts) {
+      const parentMessage = await slackEvent.channel.fetchMessage(slackEvent.event.thread_ts);
+      slackEvent.channel.id = parentMessage.channel.id;
+      slackEvent.event.ts = parentMessage.ts;
+      slackEvent.event.files = parentMessage.files;
+      cleanText = await Item.cleanMessage(parentMessage.text, parentMessage.channel.teamId);
+    }
+
     let item = await Item.findOne({
       where: { channelId: slackEvent.channel.id, ts: slackEvent.event.ts },
     });
@@ -47,14 +57,9 @@ export class Item extends BaseEntity {
       item.user = slackEvent.user;
       item.channel = slackEvent.channel;
       item.ts = slackEvent.event.ts;
-      item.message = slackEvent.event.text;
-      await item.cleanMessage(slackEvent.user.teamId);
-      item.addFileNamesToMessage(slackEvent.event.files);
-
-      if (item.message.length === 0 && slackEvent.event.thread_ts) {
-        const parentMessage = await slackEvent.channel.fetchMessage(slackEvent.event.thread_ts);
-        item.message = parentMessage.text;
-        item.addFileNamesToMessage(parentMessage.files);
+      item.message = cleanText;
+      if (slackEvent.event.files) {
+        item.filesJSON = JSON.stringify(slackEvent.event.files);
       }
 
       await item.save();
@@ -79,11 +84,27 @@ export class Item extends BaseEntity {
       item.channel = slackEvent.channel;
       item.ts = slackEvent.message.ts;
       item.message = slackEvent.message.text;
-      item.addFileNamesToMessage(slackEvent.message.files);
+
+      if (slackEvent.message.files) {
+        item.filesJSON = JSON.stringify(slackEvent.message.files);
+      }
+
       await item.save();
     }
 
     return item;
+  }
+
+  private static async cleanMessage(message: string, teamId: number) {
+    const team = await Team.findOne(teamId);
+
+    message = message.replace(/^(A|a)dd/, "");
+    message = message.replace(`<@${team.botSlackId}> add`, "");
+    message = message.replace(`<@${team.botSlackId}> Add`, "");
+    message = message.replace(`<@${team.botSlackId}>`, "");
+    message = message.trim();
+
+    return message;
   }
 
   @PrimaryGeneratedColumn()
@@ -115,6 +136,9 @@ export class Item extends BaseEntity {
 
   @Column({ default: false })
   public vague: boolean;
+
+  @Column({ nullable: true })
+  public filesJSON: string;
 
   @ManyToOne((type) => User, (user) => user.items, { eager: true })
   public user: User;
@@ -188,23 +212,5 @@ export class Item extends BaseEntity {
     this.channel.removeReactionFromMessage(this.ts);
 
     return this;
-  }
-
-  public addFileNamesToMessage(files: ISlackFile[]) {
-    if (files) {
-      files.forEach((file) => {
-        this.message = `${this.message || ""}\n*<${file.permalink}|${file.name || file.title}>*`;
-      });
-    }
-  }
-
-  private async cleanMessage(teamId: number) {
-    const team = await Team.findOne(teamId);
-
-    this.message = this.message.replace(/^(A|a)dd/, "");
-    this.message = this.message.replace(`<@${team.botSlackId}> add`, "");
-    this.message = this.message.replace(`<@${team.botSlackId}> Add`, "");
-    this.message = this.message.replace(`<@${team.botSlackId}>`, "");
-    this.message = this.message.trim();
   }
 }

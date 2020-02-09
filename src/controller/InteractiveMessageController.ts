@@ -7,8 +7,6 @@ export class InteractiveMessageController {
 
   public async interactiveMessage(request: Request, response: Response, next: NextFunction) {
     if (verifySignature(request)) {
-      // tslint:disable-next-line: no-console
-      console.log(request.body.payload);
       const payload = this.parseBody(request.body.payload);
       const interactiveMsg = new InteractiveMessageEvent(payload);
       if (interactiveMsg.findTeam()) {
@@ -24,6 +22,8 @@ export class InteractiveMessageController {
             case "undo":
               await interactiveMsg.undoCompleteItem();
               break;
+            case "view_all_modal":
+              await interactiveMsg.openItemsModal();
             default:
               break;
           }

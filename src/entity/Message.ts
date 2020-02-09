@@ -22,6 +22,7 @@ export interface IPaginationButton {
   text: string;
   start: number;
   reverse: boolean;
+  channel?: string;
 }
 
 export interface ICompleteButton {
@@ -29,6 +30,7 @@ export interface ICompleteButton {
   itemTs: string;
   start: number;
   reverse: boolean;
+  channel?: string;
 }
 
 export class Message {

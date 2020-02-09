@@ -142,7 +142,9 @@ export class User extends BaseEntity {
         types: "public_channel, private_channel, mpim, im",
       }) as IConversationsListCallResult;
       const channelIds = result.channels.map((c) => c.id);
-      const channels = await Channel.find({ relations: ["items"],
+      const channels = await Channel.find({
+        order: { name: "ASC" },
+        relations: ["items"],
         where: { slackId: In(channelIds) },
       });
       await view.addChannelsAndItems(channels, this);

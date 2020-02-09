@@ -9,23 +9,9 @@ import { Message } from "./Message";
 import { Team } from "./Team";
 import { User } from "./User";
 
-interface ITeamInfoResult extends WebAPICallResult {
-  team: {
-    id: string;
-    name: string;
-    domain: string;
-    email_domain: string;
-    icon: {
-      image_34: string;
-      image_44: string;
-      image_68: string;
-      image_88: string;
-      image_102: string;
-      image_132: string;
-      image_230: string;
-      image_original: string;
-    };
-  };
+interface IChatPermalinkResult extends WebAPICallResult {
+  channel: string;
+  permalink: string;
 }
 
 @Entity()
@@ -162,10 +148,12 @@ export class Item extends BaseEntity {
         this.channel = await Channel.findOne(this.channelId);
       }
       const client = new WebClient(this.channel.team.botToken);
-      const response = await client.team.info() as ITeamInfoResult;
+      const response = await client.chat.getPermalink({
+        channel: this.channel.slackId,
+        message_ts: this.ts,
+      }) as IChatPermalinkResult;
       if (response.ok) {
-        const domain = response.team.domain;
-        this.archiveLink = `https://${domain}.slack.com/archives/${this.channel.slackId}/p${this.ts.replace(".", "")}`;
+        this.archiveLink = response.permalink;
       }
     }
   }

@@ -181,9 +181,7 @@ export class Channel extends BaseEntity {
     }
   }
 
-  public async postItemsList(start: number, reverse: boolean, url?: string) {
-    if (start === -1) { return this.postInfo("", url); }
-
+  public async openAndRecentlyClosedItems() {
     const openItems = await this.openItems();
     const closedItems = await this.recentlyClosed();
 
@@ -191,19 +189,27 @@ export class Channel extends BaseEntity {
     items = items.sort((a, b) => {
       return a.id <= b.id ? -1 : 1;
     });
-    items = reverse ? items.reverse() : items;
+
+    return { open: openItems, recentlyCompleted: closedItems, all: items };
+  }
+
+  public async postItemsList(start: number, reverse: boolean, url?: string) {
+    if (start === -1) { return this.postInfo("", url); }
+
+    const itemObj = await this.openAndRecentlyClosedItems();
+    itemObj.all = reverse ? itemObj.all.reverse() : itemObj.all;
 
     let summaryText = "*There are no items in your queue.*";
-    if (items.length > 0 ) {
-      if (openItems.length > 0) {
+    if (itemObj.all.length > 0 ) {
+      if (itemObj.open.length > 0) {
         summaryText = "*Here are the open items in your queue*";
       } else {
-        if (closedItems.length > 0) {
+        if (itemObj.recentlyCompleted.length > 0) {
           summaryText = "*Here are the recently completed in your queue*";
         }
       }
       summaryText = reverse ? summaryText + " (newest to oldest): " : summaryText + " (oldest to newest)";
-      const message = await new Message(this).addItems(items, start, reverse, summaryText);
+      const message = await new Message(this).addItems(itemObj.all, start, reverse, summaryText);
       await message.post(url);
     } else {
       this.postInfo("", url);
@@ -225,11 +231,16 @@ export class Channel extends BaseEntity {
   public async addReactionToMessage(ts: string) {
     const client = new WebClient(this.team.botToken);
 
-    const response = await client.reactions.add({
-      channel: this.slackId,
-      name: "white_check_mark",
-      timestamp: ts,
-    });
+    try {
+      const response = await client.reactions.add({
+        channel: this.slackId,
+        name: "white_check_mark",
+        timestamp: ts,
+      });
+    } catch (error) {
+      // tslint:disable-next-line: no-console
+      console.log(error);
+    }
   }
 
   public async removeReactionFromMessage(ts: string) {
@@ -261,5 +272,19 @@ export class Channel extends BaseEntity {
     if (response.ok) {
       return new Message(this, response.message);
     }
+  }
+
+  public async openItemsModal(triggerId: string) {
+    const view = new View(this, { type: "modal", title: { type: "plain_text", text: this.name }});
+    const items = (await this.openAndRecentlyClosedItems()).all;
+    await view.addItems(items, 1, false);
+    await view.open(triggerId);
+  }
+
+  public async updateItemsModal(start: number, reverse: boolean, viewId: string, triggerId: string) {
+    const view = new View(this, { type: "modal", title: { type: "plain_text", text: this.name }});
+    const items = (await this.openAndRecentlyClosedItems()).all;
+    await view.addItems(items, start, reverse);
+    await view.update(viewId, triggerId);
   }
 }

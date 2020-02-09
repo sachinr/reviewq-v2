@@ -36,6 +36,8 @@ export class InteractiveMessageEvent {
   public view?: {
     id: string;
     type: string;
+    root_view_id: string;
+    hash: string;
   };
 
   public team: Team;
@@ -75,6 +77,12 @@ export class InteractiveMessageEvent {
           await channel.save();
         }
         this.channel = channel;
+      } else {
+        this.channel = await Channel.findOne({
+          where: {
+            slackId: JSON.parse(this.initiatingAction.action_id).channel,
+          },
+        });
       }
 
       const userId = this.message?.user || this.user_id;
@@ -106,8 +114,9 @@ export class InteractiveMessageEvent {
     // TODO: Verify that interactiveMessage can't be spoofed
     const item = await Item.findOne(completionInfo.itemId);
     await item.markComplete(this.user);
-    if (this.view?.type === "home") {
-      await this.user.publishAppHome();
+    if (this.view?.type === "modal") {
+      this.channel.updateItemsModal(completionInfo.start, completionInfo.reverse,
+        this.view.id, this.trigger_id);
     } else {
       await this.channel.postItemsList(completionInfo.start,
         completionInfo.reverse, this.response_url);
@@ -120,8 +129,14 @@ export class InteractiveMessageEvent {
     // TODO: Verify that interactiveMessage can't be spoofed
     const item = await Item.findOne(completionInfo.itemId);
     await item.markNotComplete();
-    await this.channel.postItemsList(completionInfo.start,
-      completionInfo.reverse, this.response_url);
+
+    if (this.view?.type === "modal") {
+      this.channel.updateItemsModal(completionInfo.start, completionInfo.reverse,
+        this.view.id, this.trigger_id);
+    } else {
+      await this.channel.postItemsList(completionInfo.start,
+        completionInfo.reverse, this.response_url);
+    }
     await this.channel.removeReactionFromMessage(completionInfo.itemTs);
   }
 
@@ -131,8 +146,13 @@ export class InteractiveMessageEvent {
     if (paginationInfo.text.toLowerCase() === "close") {
       this.channel.deleteMessage(this.message_ts, this.response_url);
     } else {
-      this.channel.postItemsList(paginationInfo.start,
-        paginationInfo.reverse, this.response_url);
+      if (this.view?.type === "modal") {
+        this.channel.updateItemsModal(paginationInfo.start, paginationInfo.reverse,
+          this.view.id, this.trigger_id);
+      } else {
+        this.channel.postItemsList(paginationInfo.start,
+          paginationInfo.reverse, this.response_url);
+      }
     }
   }
 
@@ -148,7 +168,10 @@ export class InteractiveMessageEvent {
       default:
         break;
     }
-
   }
 
+  public async openItemsModal() {
+    await this.findOrCreateSlackObjects();
+    this.channel.openItemsModal(this.trigger_id);
+  }
 }

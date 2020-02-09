@@ -112,10 +112,61 @@ export class View {
 
   public async addChannelsAndItems(channels: Channel[], user: User) {
     const totals = { channels: 0, items: 0};
+    this.blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Hi <@${user.slackId}>! Welcome to ReviewQ*`,
+      },
+    });
+
+    this.blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `ReviewQ helps you turn Slack messages into tasks so you can make sure nothing slips through the cracks. Use it to make sure contracts, questions, pull requests, and much more get reviewed and responded to.`,
+      },
+    });
+
+    this.blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Learn more",
+          },
+          value: "learn_more",
+        },
+      ],
+    });
+
+    this.blocks.push({
+      type: "context",
+      elements: [
+        {
+          type: "image",
+          image_url: "https://api.slack.com/img/blocks/bkb_template_images/placeholder.png",
+          alt_text: "placeholder",
+        },
+      ],
+    });
+
+    this.blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Channels*",
+      },
+    });
+
+    this.blocks.push({
+      type: "divider",
+    });
 
     for (const channel of channels) {
       const openItems = channel.items.filter((i) => !i.complete);
-      const oldestOpenItems = openItems.slice(0, 3);
       if (openItems.length > 0) {
         totals.channels += 1;
         totals.items += openItems.length;
@@ -137,69 +188,25 @@ export class View {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `*Channel: ${channelName}* (oldest ${oldestOpenItems.length} of ${openItems.length})\n  	`,
+            text: `*${channelName}* _${openItems.length} open items_`,
           },
-        });
-
-        this.buildItemBlocks(oldestOpenItems);
-
-        this.blocks.push({
-          type: "context",
-          elements: [
-            {
-              type: "image",
-              image_url: "https://api.slack.com/img/blocks/bkb_template_images/placeholder.png",
-              alt_text: "placeholder",
-            },
-          ],
-        });
-      }
-    }
-    if (totals.channels > 0) {
-      this.blocks.unshift({
-        type: "divider",
-      });
-
-      this.blocks.unshift({
-        type: "context",
-        elements: [
-          {
-            type: "mrkdwn",
-            text: `Just so you know, there are ${totals.items} open items across ${totals.channels} channels you're a member of.`,
-          },
-        ],
-      });
-
-      this.blocks.unshift({
-        type: "actions",
-        elements: [
-          {
+          accessory: {
             type: "button",
             text: {
               type: "plain_text",
-              text: "Learn more",
+              text: "View all",
             },
-            value: "learn_more",
+            value: "view_all_modal",
+            action_id: JSON.stringify({ channel: channel.slackId }),
           },
-        ],
-      });
+        });
 
-      this.blocks.unshift({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `ReviewQ helps you turn Slack messages into tasks so you can make sure nothing slips through the cracks. Use it to make sure contracts, questions, pull requests, and much more get reviewed and responded to.`,
-        },
-      });
-
-      this.blocks.unshift({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*Hi <@${user.slackId}>! Welcome to ReviewQ*`,
-        },
-      });
-    } else {
+        this.blocks.push({
+          type: "divider",
+        });
+      }
+    }
+    if (totals.channels === 0) {
       this.blocks.unshift({
         type: "section",
         text: {
@@ -223,13 +230,13 @@ export class View {
         },
         style: "primary",
         action_id: JSON.stringify({ itemId: item.id, itemTs: item.ts,
-          start, reverse } as ICompleteButton),
+          start, reverse, channel: this.channel.slackId } as ICompleteButton),
         value: "complete_item",
       } as Button;
 
       if (item.complete) {
         actionButton.action_id = JSON.stringify({ itemId: item.id, itemTs: item.ts,
-          start, reverse } as ICompleteButton);
+          start, reverse, channel: this.channel.slackId } as ICompleteButton);
         contextString = contextString + ` | Completed by <@${item.completedBy.slackId}>`;
         actionButton.text.text = ":arrow_right_hook: Undo";
         actionButton.value = "undo";
@@ -307,7 +314,7 @@ export class View {
       return result;
     } catch (err) {
       // tslint:disable-next-line: no-console
-      console.log(err.data.response_metadata);
+      console.log(JSON.stringify(args), err, err.data.response_metadata);
     }
   }
 
@@ -325,7 +332,25 @@ export class View {
       return result;
     } catch (err) {
       // tslint:disable-next-line: no-console
-      console.log(err, err.data.response_metadata);
+      console.log(JSON.stringify(args), err, err.data.response_metadata);
+    }
+  }
+
+  public async update(viewId: string, triggerId: string) {
+    const args = Object.assign({}, this);
+    delete args.channel;
+    args.type = "modal";
+    const client = new WebClient(this.channel.team.botToken);
+    try {
+      const result = await client.views.update({
+        view: args,
+        view_id: viewId,
+      });
+
+      return result;
+    } catch (err) {
+      // tslint:disable-next-line: no-console
+      console.log(JSON.stringify(args), err, err.data.response_metadata);
     }
   }
 
@@ -359,14 +384,26 @@ export class View {
   private addPaginationButtons(pagination: IPaginationInfo) {
     const buttons: IPaginationButton[] = [];
     if (pagination.end < pagination.totalItems) {
-      buttons.push({text: "Next", start: pagination.end + 1, reverse: pagination.reverse});
+      buttons.push({
+        text: "Next",
+        start: pagination.end + 1,
+        reverse: pagination.reverse,
+        channel: this.channel.slackId,
+      });
     }
     if (pagination.start > View.PER_PAGE) {
-      buttons.push({text: "Previous", start: pagination.start - View.PER_PAGE, reverse: pagination.reverse});
+      buttons.push({
+        text: "Previous",
+        start: pagination.start - View.PER_PAGE,
+        reverse: pagination.reverse,
+        channel: this.channel.slackId,
+      });
     }
-    buttons.push({ text: "Minimize", start: -1, reverse: pagination.reverse });
-    if (pagination.start === 1 && pagination.totalItems > 1) {
-      buttons.push({ text: "Sort", start: 1, reverse: !pagination.reverse });
+    if (this.type !== "modal") {
+      buttons.push({ text: "Minimize", start: -1, reverse: pagination.reverse });
+      if (pagination.start === 1 && pagination.totalItems > 1) {
+        buttons.push({ text: "Sort", start: 1, reverse: !pagination.reverse });
+      }
     }
 
     const elements: Button[]  = [];
@@ -391,9 +428,11 @@ export class View {
       }],
     } as ContextBlock);
 
-    this.blocks.push({
-      type: "actions",
-      elements,
-    } as ActionsBlock);
+    if (elements.length > 0) {
+      this.blocks.push({
+        type: "actions",
+        elements,
+      } as ActionsBlock);
+    }
   }
 }

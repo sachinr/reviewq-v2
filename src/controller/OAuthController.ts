@@ -33,8 +33,6 @@ export class OAuthController {
       }) as IOAuthV2AccessResult;
 
       if (result.ok) {
-        // tslint:disable-next-line: no-console
-        console.log(result);
         let team = await Team.findOne({slackId: result.team.id});
         if (!team) {
           team = new Team();
@@ -53,8 +51,6 @@ export class OAuthController {
           user.slackId = result.authed_user.id;
           user.team = team;
         }
-        // tslint:disable-next-line: no-console
-        console.log(result.authed_user.access_token);
         if (result.authed_user.access_token) {
           user.token = result.authed_user.access_token;
           user.scope = result.authed_user.scope;

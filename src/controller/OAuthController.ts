@@ -5,7 +5,11 @@ import { User } from "../entity/User";
 
 interface IOAuthV2AccessResult extends WebAPICallResult {
   app_id: string;
-  authed_user: { id: string; };
+  authed_user: {
+    id: string;
+    access_token: string;
+    scope: string
+  };
   scope: string;
   token_type: string;
   access_token: string;
@@ -29,6 +33,8 @@ export class OAuthController {
       }) as IOAuthV2AccessResult;
 
       if (result.ok) {
+        // tslint:disable-next-line: no-console
+        console.log(result);
         let team = await Team.findOne({slackId: result.team.id});
         if (!team) {
           team = new Team();
@@ -46,6 +52,12 @@ export class OAuthController {
           user = new User();
           user.slackId = result.authed_user.id;
           user.team = team;
+        }
+        // tslint:disable-next-line: no-console
+        console.log(result.authed_user.access_token);
+        if (result.authed_user.access_token) {
+          user.token = result.authed_user.access_token;
+          user.scope = result.authed_user.scope;
         }
         user.installer = true;
         await user.fetchProfile();

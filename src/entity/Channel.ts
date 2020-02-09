@@ -7,6 +7,7 @@ import { ISlackMessage } from "./Event";
 import { Item } from "./Item";
 import { Message } from "./Message";
 import { Team } from "./Team";
+import { User } from "./User";
 import { View } from "./View";
 
 interface IConversationInfoResult extends WebAPICallResult {
@@ -85,15 +86,21 @@ export class Channel extends BaseEntity {
 
   @BeforeUpdate()
   @BeforeInsert()
-  public async fetchInfo(): Promise<void> {
-    const client = new WebClient(this.team.botToken);
+  public async fetchInfo(user?: User): Promise<void> {
+    let client = new WebClient(this.team.botToken);
+    if (user && user.token) {
+      client = new WebClient(user.token);
+    }
+
     try {
       const response = await client.conversations.info({ channel: this.slackId }) as IConversationInfoResult;
       if (response.ok) {
         this.name = response.channel.name_normalized;
         this.isExtShared = response.channel.is_ext_shared ? true : false;
         this.isGeneral = response.channel.is_general ? true : false;
-        this.isMember = response.channel.is_member ? true : false;
+        if (!user) {
+          this.isMember = response.channel.is_member ? true : false;
+        }
         this.isOrgShared = response.channel.is_org_shared ? true : false;
         this.isPrivate = response.channel.is_private ? true : false;
         this.isReadOnly = response.channel.is_read_only ? true : false;

@@ -5,6 +5,7 @@ import { Channel } from "./Channel";
 import { ISlackFile } from "./Event";
 import { Item } from "./Item";
 import { ICompleteButton, IPaginationButton, IPaginationInfo } from "./Message";
+import { User } from "./User";
 
 // tslint:disable: object-literal-sort-keys
 export class View {
@@ -85,14 +86,14 @@ export class View {
     return this;
   }
 
-  public async buildItemBlocks(items: Item[], start: number, reverse: boolean, summaryText?: string) {
+  public async addItems(items: Item[], start: number, reverse: boolean, summaryText?: string) {
     const paginationInfo = await this.getPaginationInfo(items, start, reverse);
 
     this.blocks = [{
       type: "section",
       text: {
         type: "mrkdwn",
-        text: summaryText,
+        text: summaryText || "*Here are your items:*",
       },
     } as SectionBlock,
     {
@@ -100,28 +101,139 @@ export class View {
     } as DividerBlock,
     ];
 
-    for (const currentItem of paginationInfo.currentPageItems) {
-      let contextString = `*${currentItem.user.fullName()}* | `;
-      contextString = contextString + `<!date^${currentItem.ts.split(".")[0]}^{date} at {time}^${currentItem.archiveLink}|Archive Link>`;
+    this.buildItemBlocks(paginationInfo.currentPageItems, start, reverse);
 
-      const accButton = {
+    if (paginationInfo.totalItems > 0) {
+      this.addPaginationButtons(paginationInfo);
+    }
+
+    return this;
+  }
+
+  public async addChannelsAndItems(channels: Channel[], user: User) {
+    const totals = { channels: 0, items: 0};
+
+    for (const channel of channels) {
+      const openItems = channel.items.filter((i) => !i.complete);
+      const oldestOpenItems = openItems.slice(0, 3);
+      if (openItems.length > 0) {
+        totals.channels += 1;
+        totals.items += openItems.length;
+
+        if (channel.name === null) {
+          await channel.fetchInfo(user);
+          await channel.save();
+        }
+
+        let channelName = "";
+
+        if (channel.isMember) {
+          channelName = `<#${channel.slackId}>`;
+        } else {
+          channelName = channel.name ? `#${channel.name}` : `<@${channel.team.botSlackId}>`;
+        }
+
+        this.blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `*Channel: ${channelName}* (oldest ${oldestOpenItems.length} of ${openItems.length})\n  	`,
+          },
+        });
+
+        this.buildItemBlocks(oldestOpenItems);
+
+        this.blocks.push({
+          type: "context",
+          elements: [
+            {
+              type: "image",
+              image_url: "https://api.slack.com/img/blocks/bkb_template_images/placeholder.png",
+              alt_text: "placeholder",
+            },
+          ],
+        });
+      }
+    }
+    if (totals.channels > 0) {
+      this.blocks.unshift({
+        type: "divider",
+      });
+
+      this.blocks.unshift({
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `Just so you know, there are ${totals.items} open items across ${totals.channels} channels you're a member of.`,
+          },
+        ],
+      });
+
+      this.blocks.unshift({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Learn more",
+            },
+            value: "learn_more",
+          },
+        ],
+      });
+
+      this.blocks.unshift({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `ReviewQ helps you turn Slack messages into tasks so you can make sure nothing slips through the cracks. Use it to make sure contracts, questions, pull requests, and much more get reviewed and responded to.`,
+        },
+      });
+
+      this.blocks.unshift({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Hi <@${user.slackId}>! Welcome to ReviewQ*`,
+        },
+      });
+    } else {
+      this.blocks.unshift({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*There are no open items in the channels you're a member of*`,
+        },
+      });
+    }
+  }
+
+  public async buildItemBlocks(items: Item[], start: number = 1, reverse: boolean = false) {
+    for (const item of items) {
+      let contextString = `<!date^${item.ts.split(".")[0]}^{date} at {time}^${item.archiveLink}|Archive Link>`;
+
+      const actionButton = {
         type: "button",
         text: {
           type: "plain_text",
-          text: ":white_check_mark: Complete",
+          text: "Mark as Done",
           emoji: true,
         },
-        action_id: JSON.stringify({ itemId: currentItem.id, itemTs: currentItem.ts,
+        style: "primary",
+        action_id: JSON.stringify({ itemId: item.id, itemTs: item.ts,
           start, reverse } as ICompleteButton),
         value: "complete_item",
       } as Button;
 
-      if (currentItem.complete) {
-        accButton.action_id = JSON.stringify({ itemId: currentItem.id, itemTs: currentItem.ts,
+      if (item.complete) {
+        actionButton.action_id = JSON.stringify({ itemId: item.id, itemTs: item.ts,
           start, reverse } as ICompleteButton);
-        contextString = contextString + ` | Completed by <@${currentItem.completedBy.slackId}>`;
-        accButton.text.text = ":arrow_right_hook: Undo";
-        accButton.value = "undo";
+        contextString = contextString + ` | Completed by <@${item.completedBy.slackId}>`;
+        actionButton.text.text = ":arrow_right_hook: Undo";
+        actionButton.value = "undo";
+        delete actionButton.style;
       }
 
       const itemBlocks: Block[] = [
@@ -130,12 +242,12 @@ export class View {
           elements: [
             {
               type: "image",
-              image_url: currentItem.user.avatar24,
-              alt_text: currentItem.user.fullName(),
+              image_url: item.user.avatar24,
+              alt_text: item.user.fullName(),
             },
             {
               type: "mrkdwn",
-              text: contextString,
+              text: `*${item.user.fullName()}* on ${contextString}`,
             },
           ],
         } as ContextBlock,
@@ -143,14 +255,13 @@ export class View {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: currentItem.message || "`No message text`",
+            text: `${item.message}` || "`No message text`",
           },
-          accessory: accButton,
         } as SectionBlock,
       ];
 
-      if (currentItem.filesJSON) {
-        const files: ISlackFile[] = JSON.parse(currentItem.filesJSON);
+      if (item.filesJSON) {
+        const files: ISlackFile[] = JSON.parse(item.filesJSON);
         let fileString = "*Files:*\n";
 
         for (const file of files) {
@@ -158,13 +269,22 @@ export class View {
         }
 
         itemBlocks.push({
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: fileString,
-          },
-        } as SectionBlock);
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: fileString,
+            },
+          ],
+        } as ContextBlock);
       }
+
+      itemBlocks.push({
+        type: "actions",
+        elements: [
+          actionButton,
+        ],
+      } as ActionsBlock);
 
       itemBlocks.push({
         type: "divider",
@@ -172,12 +292,6 @@ export class View {
 
       this.blocks = this.blocks.concat(itemBlocks);
     }
-
-    if (paginationInfo.totalItems > 0) {
-      this.addPaginationButtons(paginationInfo);
-    }
-
-    return this;
   }
 
   public async open(trigger_id: string) {
@@ -197,7 +311,7 @@ export class View {
     }
   }
 
-  public async publish(userSlackId: string) {
+  public async publish(user: User) {
     const args = Object.assign({}, this);
     delete args.channel;
     args.type = "home";
@@ -205,13 +319,13 @@ export class View {
     try {
       const result = await client.views.publish({
         view: args,
-        user_id: userSlackId,
+        user_id: user.slackId,
       });
 
       return result;
     } catch (err) {
       // tslint:disable-next-line: no-console
-      console.log(err.data.response_metadata);
+      console.log(err, err.data.response_metadata);
     }
   }
 

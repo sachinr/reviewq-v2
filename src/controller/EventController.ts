@@ -24,6 +24,10 @@ export class EventController {
                 await slackEvent.findOrCreateSlackObjects();
                 await slackEvent.channel.postWelcomeMessage();
                 break;
+
+              case slackEvent.appHomeOpened():
+                await slackEvent.findOrCreateSlackObjects();
+                await slackEvent.user.publishAppHome();
             }
             break;
           }

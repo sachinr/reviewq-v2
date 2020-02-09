@@ -1,8 +1,18 @@
 import { WebAPICallResult, WebClient } from "@slack/web-api";
-import { BaseEntity, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { BaseEntity, Column, Entity, In, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
-import {Item} from "./Item";
-import {Team} from "./Team";
+import { Channel } from "./Channel";
+import { Item } from "./Item";
+import { Team } from "./Team";
+import { View } from "./View";
+
+interface IConversationsListChannel {
+  id: string;
+}
+
+interface IConversationsListCallResult extends WebAPICallResult {
+  channels: IConversationsListChannel[];
+}
 
 interface IUsersInfoCallResult extends WebAPICallResult {
   user: {
@@ -119,6 +129,27 @@ export class User extends BaseEntity {
       this.avatar24 = resUser.profile.image_24;
       this.displayName = resUser.profile.display_name;
       this.realName = resUser.profile.real_name;
+    }
+  }
+
+  public async publishAppHome() {
+    const channel = new Channel();
+    channel.team = await Team.findOne(this.teamId);
+    const view = new View(channel);
+    if (this.token) {
+      const client = new WebClient(this.token);
+      const result = await client.conversations.list({
+        types: "public_channel, private_channel, mpim, im",
+      }) as IConversationsListCallResult;
+      const channelIds = result.channels.map((c) => c.id);
+      const channels = await Channel.find({ relations: ["items"],
+        where: { slackId: In(channelIds) },
+      });
+      await view.addChannelsAndItems(channels, this);
+      await view.publish(this);
+
+    } else {
+      throw new Error("no token");
     }
   }
 

@@ -114,6 +114,10 @@ export class Event {
     return this.event.type === "member_joined_channel" && this.event.user === this.team.botSlackId;
   }
 
+  public appHomeOpened() {
+    return this.event.type === "app_home_opened";
+  }
+
   public findUserCommand(): string {
     const loweredMessage = this.event.text.toLowerCase();
     const actionEntry = Object.entries(this.userCommands()).find((entry) => {

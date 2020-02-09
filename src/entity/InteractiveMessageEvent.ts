@@ -33,6 +33,10 @@ export class InteractiveMessageEvent {
   public is_app_unfurl: boolean;
   public response_url: string;
   public trigger_id: string;
+  public view?: {
+    id: string;
+    type: string;
+  };
 
   public team: Team;
   public channel: Channel;
@@ -59,17 +63,19 @@ export class InteractiveMessageEvent {
 
   public async findOrCreateSlackObjects(): Promise<InteractiveMessageEvent> {
     if (await this.findTeam()) {
-      let channel = await Channel.findOne({
-        where: { slackId: this.channel_id, teamId: this.team.id },
-      });
+      if (this.channel_id) {
+        let channel = await Channel.findOne({
+          where: { slackId: this.channel_id, teamId: this.team.id },
+        });
 
-      if (!channel) {
-        channel = new Channel();
-        channel.slackId = this.channel_id;
-        channel.team = this.team;
-        await channel.save();
+        if (!channel) {
+          channel = new Channel();
+          channel.slackId = this.channel_id;
+          channel.team = this.team;
+          await channel.save();
+        }
+        this.channel = channel;
       }
-      this.channel = channel;
 
       const userId = this.message?.user || this.user_id;
 
@@ -100,8 +106,12 @@ export class InteractiveMessageEvent {
     // TODO: Verify that interactiveMessage can't be spoofed
     const item = await Item.findOne(completionInfo.itemId);
     await item.markComplete(this.user);
-    await this.channel.postItemsList(completionInfo.start,
-      completionInfo.reverse, this.response_url);
+    if (this.view?.type === "home") {
+      await this.user.publishAppHome();
+    } else {
+      await this.channel.postItemsList(completionInfo.start,
+        completionInfo.reverse, this.response_url);
+    }
   }
 
   public async undoCompleteItem() {

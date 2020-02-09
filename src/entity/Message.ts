@@ -114,7 +114,7 @@ export class Message {
 
   public async addItems(items: Item[], start: number, reverse: boolean, summaryText?: string) {
     const view = new View(this.channel);
-    await view.buildItemBlocks(items, start, reverse, summaryText);
+    await view.addItems(items, start, reverse, summaryText);
     this.replace_original = true;
 
     this.text = summaryText;

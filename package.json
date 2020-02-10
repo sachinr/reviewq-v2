@@ -16,6 +16,7 @@
     "express": "^4.17.1",
     "node-fetch": "^2.6.0",
     "pg": "^7.17.0",
+    "pg-connection-string": "^2.1.0",
     "reflect-metadata": "^0.1.13",
     "source-map-support": "^0.5.16",
     "tslint": "^5.20.1",

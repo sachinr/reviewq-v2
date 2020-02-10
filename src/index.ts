@@ -3,17 +3,33 @@ import "reflect-metadata";
 import * as bodyParser from "body-parser";
 import dotenv from "dotenv";
 import express from "express";
-import { createConnection } from "typeorm";
+import { ConnectionOptions, createConnection } from "typeorm";
 
 import { Routes } from "./routes";
 
+import * as PostgressConnectionStringParser from "pg-connection-string";
 import sourcemap from "source-map-support";
 
 // initialize configuration
 dotenv.config();
 sourcemap.install();
 
-createConnection().then(async (connection) => {
+let connectionOptions;
+if (process.env.DATABASE_URL) {
+  connectionOptions = PostgressConnectionStringParser.parse(process.env.DATABASE_URL);
+}
+
+createConnection({
+  database: connectionOptions?.database || process.env.TYPEORM_DATABASE,
+  entities: ["./dist/entity/**/*.js"],
+  host: connectionOptions?.host || process.env.TYPEORM_HOST,
+  migrations: ["./dist/migrations/**/*.js"],
+  password: connectionOptions?.password || process.env.TYPEORM_PASSWORD,
+  port: connectionOptions?.port || 5432,
+  subscribers: ["./dist/subscribers/**/*.js"],
+  type: "postgres",
+  username: connectionOptions?.user || process.env.TYPEORM_USERNAME,
+} as ConnectionOptions).then(async (connection) => {
   const app = express();
 
   const rawBodySaver = (req: express.Request, res: express.Response, buf: Buffer, encoding: string) => {

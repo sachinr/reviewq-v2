@@ -59,7 +59,7 @@ export class OAuthController {
         await user.fetchProfile();
         await user.save();
 
-        response.redirect(`https://slack.com/app_redirect?app=${result.app_id}&team=${result.team.id}`);
+        response.redirect(`https://slack.com/app_redirect?app=${result.app_id}&team=${result.team.id}&tab=home`);
       } else {
         return result.response_metadata;
       }

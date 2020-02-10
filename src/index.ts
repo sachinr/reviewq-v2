@@ -58,10 +58,10 @@ createConnection({
   });
 
   // start express server
-  app.listen(process.env.SERVER_PORT);
+  app.listen(process.env.PORT);
 
   // tslint:disable-next-line: no-console
-  console.log(`${process.env.NODE_ENV} // Express server has started on port ${process.env.SERVER_PORT}. Open http://localhost:${process.env.SERVER_PORT}/users to see results`);
+  console.log(`${process.env.NODE_ENV} // Express server has started on port ${process.env.PORT}`);
 
   // tslint:disable-next-line: no-console
 }).catch((error) => console.log(error));

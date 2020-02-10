@@ -3,11 +3,16 @@ import { NextFunction, Request, Response } from "express";
 import { InteractiveMessageEvent } from "../entity/InteractiveMessageEvent";
 import { verifySignature } from "../helpers/slackVerificationHelper";
 
+import { Channel } from "../entity/Channel";
+import { View } from "../entity/View";
+
 export class InteractiveMessageController {
 
   public async interactiveMessage(request: Request, response: Response, next: NextFunction) {
     if (verifySignature(request)) {
       const payload = this.parseBody(request.body.payload);
+      // tslint:disable-next-line: no-console
+      console.log(request.body.payload);
       const interactiveMsg = new InteractiveMessageEvent(payload);
       if (interactiveMsg.findTeam()) {
         response.send("");
@@ -24,6 +29,10 @@ export class InteractiveMessageController {
               break;
             case "view_all_modal":
               await interactiveMsg.openItemsModal();
+              break;
+            case "help":
+              await interactiveMsg.openHelpModal();
+              break;
             default:
               break;
           }

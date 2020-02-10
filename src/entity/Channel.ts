@@ -176,7 +176,8 @@ export class Channel extends BaseEntity {
 
   public async postWelcomeMessage() {
     if ((await this.openItems()).length === 0) {
-      const message = new Message(this, { text: "Hi! I can help you manage a list of tasks in this channel. Click the button below to learn more." });
+      const message = new Message(this);
+      message.addWelcomeMessage();
       await message.post();
     }
   }
@@ -286,5 +287,10 @@ export class Channel extends BaseEntity {
     const items = (await this.openAndRecentlyClosedItems()).all;
     await view.addItems(items, start, reverse);
     await view.update(viewId, triggerId);
+  }
+
+  public async openHelpModal(triggerId: string) {
+    const view = new View(this, { type: "modal", title: { type: "plain_text", text: "ReviewQ" }});
+    await view.addHelp().open(triggerId);
   }
 }

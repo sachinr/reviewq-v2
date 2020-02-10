@@ -1,4 +1,4 @@
-import { AttachmentAction, Block, DividerBlock, MessageAttachment, SectionBlock } from "@slack/types";
+import { ActionsBlock, AttachmentAction, Block, MessageAttachment, SectionBlock } from "@slack/types";
 
 import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
 import nodeFetch from "node-fetch";
@@ -126,41 +126,35 @@ export class Message {
   }
 
   public addHelpMessage() {
-    this.attachments.push({
-      mrkdwn_in: ["text"],
-      fallback: "Required plain-text summary of the attachment.",
-      color: Message.PRIMARY_COLOR,
-      title: "ReviewQ lets you build a queue of messages to review in a channel",
-      text: "ReviewQ is a way to manage a queue of work within the context of a channel. For example, a legal team might queue up messages requesting them to review contracts. Software development team might queue up Pull Requests that need to be reviewed.\n\n :arrow_right: To get started, invite *@reviewq* to a channel.",
-    });
+    const view = new View(this.channel);
+    view.addHelp();
+    this.blocks = view.blocks;
+    return this;
+  }
 
-    this.attachments.push({
-      color: Message.SECONDARY_COLOR,
-      author_name: "Usage",
-      mrkdwn_in: ["text", "fields"],
-      fields: [
+  public addWelcomeMessage() {
+    this.blocks.push({
+      type: "section",
+      text: {
+        text: "Hi! I can help you manage a list of tasks in this channel. Click the button below to learn more.",
+        type: "mrkdwn",
+      },
+    } as SectionBlock);
+
+    this.blocks.push({
+      type: "actions",
+      elements: [
         {
-          title: ":one: Add text to the queue",
-          value: "`@reviewq add [text to add]`",
-          short: true,
-        },
-        {
-          title: ":two: Show queue for a channel",
-          value: "`@reviewq list`",
-          short: true,
-        },
-        {
-          title: ":three: Add a message to the queue",
-          value: "<https://get.slack.help/hc/en-us/articles/203274767-Share-messages-in-Slack|Share the message> and comment with `@reviewq add`",
-          short: true,
-        },
-        {
-          title: ":four: Add a file to the queue",
-          value: "Leave a comment (not title!) with `@reviewq add` to an existing or new file",
-          short: true,
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "Learn more",
+          },
+          value: "help",
+          action_id: JSON.stringify({team: this.channel.team.slackId}),
         },
       ],
-    });
+    } as ActionsBlock);
 
     return this;
   }

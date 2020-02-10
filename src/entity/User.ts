@@ -107,17 +107,17 @@ export class User extends BaseEntity {
     if (this.firstName) {
       return `${this.firstName} ${this.lastName}`;
     } else {
-      return this.displayName || this.realName || "Unknown user";
+      return this.displayName || this.realName || `<@${this.slackId}>`;
     }
   }
 
   public async fetchProfile() {
-    const client = new WebClient(this.team.botToken);
-    const result = await client.users.info({
-      user: this.slackId,
-    }) as IUsersInfoCallResult;
+    try {
+      const client = new WebClient(this.team.botToken);
+      const result = await client.users.info({
+        user: this.slackId,
+      }) as IUsersInfoCallResult;
 
-    if (result.ok) {
       const resUser = result.user;
       this.isAdmin = resUser.is_admin;
       this.isOwner = resUser.is_owner;
@@ -129,6 +129,9 @@ export class User extends BaseEntity {
       this.avatar24 = resUser.profile.image_24;
       this.displayName = resUser.profile.display_name;
       this.realName = resUser.profile.real_name;
+    } catch (error) {
+      // tslint:disable-next-line: no-console
+      console.log(error);
     }
   }
 
@@ -147,12 +150,13 @@ export class User extends BaseEntity {
         relations: ["items"],
         where: { slackId: In(channelIds) },
       });
-      await view.addChannelsAndItems(channels, this);
-      await view.publish(this);
-
+      view.addAppHomeIntro(this.slackId);
+      await view.addChannelsList(channels, this);
     } else {
-      throw new Error("no token");
+      view.addHelp();
+      view.addAuthLink();
     }
+    await view.publish(this);
   }
 
 }

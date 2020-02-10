@@ -110,13 +110,106 @@ export class View {
     return this;
   }
 
-  public async addChannelsAndItems(channels: Channel[], user: User) {
-    const totals = { channels: 0, items: 0};
+  public addHelp() {
+    this.blocks = this.blocks.concat([
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*Turn messages into tasks _quickly_*\nReviewQ is the easiest way to make sure requests and questions in a channel don't get forgotten.",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*Why use ReviewQ?*\n• It's really really simple. No complex workflows. No boards and burndown charts. Just a list of messages in a channel that need to be reviewed.\n• Useful for all sorts of teams - legal can keep track of contracts to review or engineering can keep track of PRs that need a +1.",
+        },
+      },
+      {
+        type: "divider",
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*Get Started!*",
+        },
+      },
+      {
+        type: "image",
+        title: {
+          type: "plain_text",
+          text: "image1",
+          emoji: true,
+        },
+        image_url: "https://api.slack.com/img/blocks/bkb_template_images/onboardingComplex.jpg",
+        alt_text: "image1",
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*:one: Use the _Add to ReviewQ_ action.* If you want to keep track of a message, select `Add to ReviewQ` in a message's context menu (click the three dots when hovering over it). If you don't see it, click \"More message actions...\".",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*:two: Use the `/reviewq` command*. Type `/reviewq` to see a list of messages that need to be reviewed in the current channel. Click 'Mark as Done' to remove a message from the queue and notify the author.",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: ":three: *Add @reviewq to a channel* by typing `/invite @ReviewQ` from the channel. Say any of the following to get started with the bot:",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "• *@ReviewQ add [text]* to add [text] to your queue\n• *@ReviewQ add* in a thread to add the parent message to the queue\n• *@ReviewQ list* to see existing messages in the channel queue",
+        },
+
+      },
+    ]);
+    return this;
+  }
+
+  public addAuthLink() {
+    this.blocks = this.blocks.concat([{
+      type: "divider",
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "If you authorize ReviewQ to see which channels you're part of, you'll be able to manage all your queues right here right now",
+      },
+    },
+    {
+      type: "actions",
+      elements: [{
+        type: "button",
+        url: `https://slack.com/oauth/v2/authorize?client_id=${process.env.SLACK_CLIENT_ID}&user_scope=channels:read,groups:read,mpim:read,im:read`,
+        text: {
+          type: "plain_text",
+          text: "Authorize",
+        },
+        style: "primary",
+      }],
+    }]);
+  }
+
+  public addAppHomeIntro(userSlackId: string) {
     this.blocks.push({
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*Hi <@${user.slackId}>! Welcome to ReviewQ*`,
+        text: `*Hi <@${userSlackId}>! Welcome to ReviewQ*`,
       },
     });
 
@@ -137,7 +230,8 @@ export class View {
             type: "plain_text",
             text: "Learn more",
           },
-          value: "learn_more",
+          value: "help",
+          action_id: JSON.stringify({team: this.channel.team.slackId}),
         },
       ],
     });
@@ -152,6 +246,12 @@ export class View {
         },
       ],
     });
+
+    return this;
+  }
+
+  public async addChannelsList(channels: Channel[], user: User) {
+    const totals = { channels: 0, items: 0};
 
     this.blocks.push({
       type: "section",
@@ -215,6 +315,8 @@ export class View {
         },
       });
     }
+
+    return this;
   }
 
   public async buildItemBlocks(items: Item[], start: number = 1, reverse: boolean = false) {
@@ -249,7 +351,7 @@ export class View {
           elements: [
             {
               type: "image",
-              image_url: item.user.avatar24,
+              image_url: item.user.avatar24 || "https://ca.slack-edge.com/T0NA99EG1-USC651H5X-ge6065915aa8-72",
               alt_text: item.user.fullName(),
             },
             {
@@ -434,5 +536,7 @@ export class View {
         elements,
       } as ActionsBlock);
     }
+
+    return this;
   }
 }

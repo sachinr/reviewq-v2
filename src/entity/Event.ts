@@ -10,6 +10,7 @@ export interface ISlackMessage {
   type: string;
   text: string;
   user: string;
+  bot_id: string;
   ts: string;
   team: string;
   blocks: Block[];

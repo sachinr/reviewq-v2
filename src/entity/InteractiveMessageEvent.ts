@@ -78,20 +78,23 @@ export class InteractiveMessageEvent {
         }
         this.channel = channel;
       } else {
-        this.channel = await Channel.findOne({
-          where: {
-            slackId: JSON.parse(this.initiatingAction.action_id).channel,
-          },
-        });
+        const actionId = JSON.parse(this.initiatingAction.action_id);
+        if (actionId.channel) {
+          this.channel = await Channel.findOne({
+            where: {
+              slackId: actionId.channel,
+            },
+          });
+        }
       }
 
-      const userId = this.message?.user || this.user_id;
+      const userId = this.message?.user || this.message?.bot_id || this.user_id;
 
       let user = await User.findOne({ where: { slackId: userId } });
 
       if (!user) {
         user = new User();
-        user.slackId = this.user_id;
+        user.slackId = userId;
         user.team = this.team;
         await user.fetchProfile();
         await user.save();
@@ -173,5 +176,12 @@ export class InteractiveMessageEvent {
   public async openItemsModal() {
     await this.findOrCreateSlackObjects();
     this.channel.openItemsModal(this.trigger_id);
+  }
+
+  public async openHelpModal() {
+    await this.findOrCreateSlackObjects();
+    const channel = new Channel();
+    channel.team = this.team;
+    channel.openHelpModal(this.trigger_id);
   }
 }

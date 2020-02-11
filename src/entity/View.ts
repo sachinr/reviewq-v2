@@ -307,7 +307,7 @@ export class View {
       }
     }
     if (totals.channels === 0) {
-      this.blocks.unshift({
+      this.blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",

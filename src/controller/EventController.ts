@@ -28,11 +28,12 @@ export class EventController {
               case slackEvent.appHomeOpened():
                 await slackEvent.findOrCreateSlackObjects();
                 await slackEvent.user.publishAppHome();
+                break;
             }
-            break;
           }
         default:
           response.sendStatus(500);
+          throw new Error(JSON.stringify(request.body));
       }
     } else {
       response.sendStatus(500);

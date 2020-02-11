@@ -27,6 +27,7 @@ createConnection({
   password: connectionOptions?.password || process.env.TYPEORM_PASSWORD,
   port: connectionOptions?.port || 5432,
   subscribers: ["./dist/subscribers/**/*.js"],
+  synchronize: process.env.TYPEORM_SYNCHRONIZE === "true",
   type: "postgres",
   username: connectionOptions?.user || process.env.TYPEORM_USERNAME,
 } as ConnectionOptions).then(async (connection) => {

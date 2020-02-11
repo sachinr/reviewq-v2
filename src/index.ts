@@ -23,6 +23,7 @@ createConnection({
   database: connectionOptions?.database || process.env.TYPEORM_DATABASE,
   entities: ["./dist/entity/**/*.js"],
   host: connectionOptions?.host || process.env.TYPEORM_HOST,
+  logging: process.env.TYPEORM_LOGGING,
   migrations: ["./dist/migrations/**/*.js"],
   password: connectionOptions?.password || process.env.TYPEORM_PASSWORD,
   port: connectionOptions?.port || 5432,

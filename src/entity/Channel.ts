@@ -261,6 +261,7 @@ export class Channel extends BaseEntity {
       const response = await client.conversations.join({
       channel: this.slackId,
       });
+      if (response.ok) { this.isMember = true; this.save(); }
     }
   }
 

@@ -12,11 +12,17 @@ import { WebClient } from "@slack/web-api";
 import { InteractiveMessageEvent } from "../entity/InteractiveMessageEvent";
 
 const postMessage = jest.fn();
+const getPermalink = jest.fn(() => {
+  return { ok: true };
+});
 
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
     return {
-      chat: { postMessage },
+      chat: {
+        getPermalink,
+        postMessage,
+      },
       conversations: {
         info: jest.fn(() => {
           return { ok: true, channel: { is_channel: true } };
@@ -56,8 +62,11 @@ test("create from event", async () => {
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
+    blocks: [],
+    bot_id: "",
     channel: channel.slackId,
     event_ts: "123",
+    team: "",
     text: "add",
     ts: "1234",
     type: "message",
@@ -76,8 +85,11 @@ test("cleans message", async () => {
   const slackEvent = new Event();
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
+    blocks: [],
+    bot_id: "",
     channel: channel.slackId,
     event_ts: "123",
+    team: "",
     text: "add something",
     ts: "1234",
     type: "message",
@@ -148,7 +160,15 @@ test("createFromInteractiveMessage - new item", async () => {
 
   event.channel = channel;
   event.user = user;
-  event.message = { type: "", text: "message_text", user: "", ts: "message_ts", team: "", blocks: []};
+  event.message = {
+    blocks: [],
+    bot_id: "",
+    team: "",
+    text: "message_text",
+    ts: "message_ts",
+    type: "",
+    user: "",
+  };
 
   const item = await Item.createFromInteractiveMessage(event);
   expect(item.channel).toStrictEqual(channel);
@@ -166,7 +186,15 @@ test("createFromInteractiveMessage - previously closed item", async () => {
   await item.markComplete(user);
 
   event.channel = channel;
-  event.message = { type: "", text: "", user: "", ts: item.ts, team: "", blocks: []};
+  event.message = {
+    blocks: [],
+    bot_id: "",
+    team: "",
+    text: "",
+    ts: item.ts,
+    type: "",
+    user: "",
+  };
 
   const item2 = await Item.createFromInteractiveMessage(event);
   expect(item.id).toBe(item2.id);
@@ -181,7 +209,15 @@ test("createFromInteractiveMessage - currently open item", async () => {
   const item = await setupItem(channel, user).save();
 
   event.channel = channel;
-  event.message = { type: "", text: "", user: "", ts: item.ts, team: "", blocks: []};
+  event.message = {
+    blocks: [],
+    bot_id: "",
+    team: "",
+    text: "",
+    ts: item.ts,
+    type: "",
+    user: "",
+  };
 
   const item2 = await Item.createFromInteractiveMessage(event);
   expect(item.id).toBe(item2.id);
@@ -195,9 +231,8 @@ test("createArchiveLink", async () => {
   const user = await setupUser(team).save();
   const item = setupItem(channel, user);
 
-  item.archiveLink = undefined;
   await item.save();
-  expect(item.archiveLink).toBe(`https://testsuite.com.slack.com/archives/${channel.slackId}/p${item.ts.replace(".", "")}`);
+  expect(getPermalink).toBeCalledTimes(1);
 });
 
 test("markNotComplete", async () => {

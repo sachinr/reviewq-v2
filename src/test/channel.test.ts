@@ -7,10 +7,19 @@ import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
 
+const getPermalink = jest.fn(() => {
+  return { ok: true };
+});
+
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
     return {
-      chat: { postMessage: jest.fn() },
+      chat: {
+        getPermalink: jest.fn(() => {
+          return { ok: true };
+        }),
+        postMessage: jest.fn(),
+      },
       conversations: {
         info: jest.fn(() => {
           return { ok: true, channel: { is_channel: true } };

@@ -11,7 +11,12 @@ import {User} from "../entity/User";
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
     return {
-      chat: { postMessage: jest.fn() },
+      chat: {
+        getPermalink: jest.fn(() => {
+          return { ok: true };
+        }),
+        postMessage: jest.fn(),
+      },
       conversations: {
         info: jest.fn(() => {
           return { ok: true, channel: { is_channel: true } };
@@ -67,8 +72,11 @@ test("findOrCreateSlackObjects() finds channel and user", async () => {
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: channel.slackId,
     event_ts: "123",
+    team: "",
     text: "test",
     ts: "1234",
     type: "message",
@@ -87,8 +95,11 @@ test("findOrCreateSlackObjects() creates channel and user", async () => {
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: "C1234",
     event_ts: "123",
+    team: "",
     text: "test",
     ts: "1234",
     type: "message",
@@ -109,8 +120,11 @@ test("processes message events", async () => {
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: channel.slackId,
     event_ts: "123",
+    team: "",
     text: "add",
     ts: "1234",
     type: "message",
@@ -129,8 +143,11 @@ test("processes message events", async () => {
   slackEvent.team_id = team.slackId;
   slackEvent.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: channel.slackId,
     event_ts: "123",
+    team: "",
     text: `<@${team.botSlackId}> add`,
     ts: "1234",
     type: "message",
@@ -144,8 +161,11 @@ test("isMessageType", async () => {
   const event = new Event();
   event.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: "",
     event_ts: "",
+    team: "",
     text: "",
     ts: "",
     type: "message",
@@ -165,8 +185,11 @@ test("isMemberJoined", async () => {
   event.team = team;
   event.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: "",
     event_ts: "",
+    team: "",
     text: "",
     ts: "",
     type: "member_joined_channel",
@@ -184,8 +207,11 @@ test("findUserCommands", async () => {
   event.team = team;
   event.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: "",
     event_ts: "",
+    team: "",
     text: "AdD something",
     ts: "",
     type: "message",
@@ -214,8 +240,11 @@ test("posts help in channel", async () => {
   event.channel = channel;
   event.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: "",
     event_ts: "",
+    team: "",
     text: "<@bot_slack_id> help",
     ts: "",
     type: "message",
@@ -238,8 +267,11 @@ test("posts help in DM", async () => {
   event.channel = channel;
   event.event = {
     attachments: [],
+    blocks: [],
+    bot_id: "",
     channel: channel.slackId,
     event_ts: "",
+    team: "",
     text: "help",
     ts: "",
     type: "message",

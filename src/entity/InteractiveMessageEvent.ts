@@ -6,7 +6,7 @@ import { Team } from "./Team";
 import { User } from "./User";
 
 // tslint:disable: variable-name
-interface IAction {
+export interface IAction {
   name?: string;
   type: string;
   value: string;

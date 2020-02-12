@@ -10,7 +10,12 @@ import {User} from "../entity/User";
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
     return {
-      chat: { postMessage: jest.fn() },
+      chat: {
+        getPermalink: jest.fn(() => {
+          return { ok: true };
+        }),
+        postMessage: jest.fn(),
+      },
       conversations: {
         info: jest.fn(() => {
           return { ok: true, channel: { is_channel: true } };

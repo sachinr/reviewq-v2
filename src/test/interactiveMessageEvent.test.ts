@@ -3,7 +3,7 @@ import {createConnection, getConnection, getRepository} from "typeorm";
 import {setupChannel, setupItem, setupTeam, setupUser} from "./helpers";
 
 import {Channel} from "../entity/Channel";
-import {InteractiveMessageEvent} from "../entity/InteractiveMessageEvent";
+import {IAction, InteractiveMessageEvent} from "../entity/InteractiveMessageEvent";
 import {Item} from "../entity/Item";
 import {Team} from "../entity/Team";
 import {User} from "../entity/User";
@@ -11,7 +11,12 @@ import {User} from "../entity/User";
 jest.mock("@slack/web-api", () => ({
   WebClient: jest.fn(() => {
     return {
-      chat: { postMessage: jest.fn() },
+      chat: {
+        getPermalink: jest.fn(() => {
+          return { ok: true };
+        }),
+        postMessage: jest.fn(),
+      },
       conversations: {
         info: jest.fn(() => {
           return { ok: true, channel: { is_channel: true } };
@@ -68,7 +73,7 @@ test("completeItem", async () => {
     reverse: false,
     start: 1,
   };
-  const action = {name: "name", type: "type", value: JSON.stringify({completeButtonValue})};
+  const action = {name: "name", type: "type", action_id: JSON.stringify({completeButtonValue})} as IAction;
   const event = new InteractiveMessageEvent({
     actions: [action],
     channel_id: channel.slackId,
@@ -94,7 +99,7 @@ test("undoCompleteItem", async () => {
     reverse: false,
     start: 1,
   };
-  const action = {name: "name", type: "type", value: JSON.stringify({completeButtonValue})};
+  const action = {name: "name", type: "type", action_id: JSON.stringify({completeButtonValue})} as IAction;
   const event = new InteractiveMessageEvent({
     actions: [action],
     channel_id: channel.slackId,
@@ -113,7 +118,7 @@ test("paginate - close list", async () => {
     start: 1,
     text: "close",
   };
-  const action = { name: "name", type: "type", value: JSON.stringify(closeButtonValue) };
+  const action = { name: "name", type: "type", action_id: JSON.stringify(closeButtonValue) };
   const event = new InteractiveMessageEvent({ actions: [action] });
   event.channel = new Channel();
   event.channel.deleteMessage = jest.fn();
@@ -131,7 +136,7 @@ test("paginate - next or previous", async () => {
     start: 1,
     text: "Next",
   };
-  const action = { name: "name", type: "type", value: JSON.stringify(paginationButtonValue) };
+  const action = { name: "name", type: "type", action_id: JSON.stringify(paginationButtonValue) };
   const event = new InteractiveMessageEvent({ actions: [action] });
   event.channel = new Channel();
   event.channel.postItemsList = jest.fn();

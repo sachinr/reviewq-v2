@@ -153,14 +153,6 @@ export class Channel extends BaseEntity {
     }
   }
 
-  public async openNewItemModal(triggerId: string) {
-    const client = new WebClient((this.team).botToken);
-    const view = new View(this);
-    view.addNewItemForm();
-    const result = await view.open(triggerId);
-    return result.ok;
-  }
-
   public async postError(errorMessage: string, url?: string) {
     const message = new Message(this).addErrorMessage(errorMessage).post(url);
   }
@@ -291,7 +283,7 @@ export class Channel extends BaseEntity {
   }
 
   public async openHelpModal(triggerId: string) {
-    const view = new View(this, { type: "modal", title: { type: "plain_text", text: "ReviewQ" }});
+    const view = new View(this, { type: "modal", title: { type: "plain_text", text: process.env.APP_NAME }});
     await view.addHelp().open(triggerId);
   }
 }

@@ -36,56 +36,6 @@ export class View {
     }
   }
 
-  public async addNewItemForm() {
-    this.blocks = [
-      {
-        type: "input",
-        element: {
-          type: "plain_text_input",
-          multiline: true,
-        },
-        label: {
-          type: "plain_text",
-          text: "Quick add",
-          emoji: true,
-        },
-      },
-      {
-        type: "divider",
-      },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: "*Tip:* You can use the 'Add to Queue' message action on any message to add it to the channel's queue.",
-        },
-      },
-      {
-        type: "image",
-        title: {
-          type: "plain_text",
-          text: "How to add existing messages",
-          emoji: true,
-        },
-        image_url: "http://reviewq.sachinr.com:4444/message-action-screenshot.png",
-        alt_text: "Example Image",
-      }];
-    this.callback_id = "new_item";
-    this.submit = {
-      type: "plain_text",
-      text: "Submit",
-      emoji: true,
-    };
-    this.title = {
-      text: "New item",
-      type: "plain_text",
-      emoji: true,
-    };
-    this.type = "modal";
-
-    return this;
-  }
-
   public async addItems(items: Item[], start: number, reverse: boolean, summaryText?: string) {
     const paginationInfo = await this.getPaginationInfo(items, start, reverse);
 
@@ -116,14 +66,14 @@ export class View {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*Turn messages into tasks _quickly_*\nReviewQ is the easiest way to make sure requests and questions in a channel don't get forgotten.",
+          text: `*Turn messages into tasks _quickly_*\n${process.env.APP_NAME} is the easiest way to make sure requests and questions in a channel don't get forgotten.`,
         },
       },
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*Why use ReviewQ?*\n• It's really really simple. No complex workflows. No boards and burndown charts. Just a list of messages in a channel that need to be reviewed.\n• Useful for all sorts of teams - legal can keep track of contracts to review or engineering can keep track of PRs that need a +1.",
+          text: `*Why use ${process.env.APP_NAME}?*\n• It's really really simple. No complex workflows. No boards and burndown charts. Just a list of messages in a channel that need to be reviewed.\n• Useful for all sorts of teams - legal can keep track of contracts to review or engineering can keep track of PRs that need a +1.`,
         },
       },
       {
@@ -150,28 +100,28 @@ export class View {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*:one: Use the _Add to ReviewQ_ action.* If you want to keep track of a message, select `Add to ReviewQ` in a message's context menu (click the three dots when hovering over it). If you don't see it, click \"More message actions...\".",
+          text: `*:one: Use the _Add to ${process.env.APP_NAME}_ action.* If you want to keep track of a message, select \`Add to ${process.env.APP_NAME}\` in a message's context menu (click the three dots when hovering over it). If you don't see it, click "More message actions...".`,
         },
       },
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*:two: Use the `/reviewq` command*. Type `/reviewq` to see a list of messages that need to be reviewed in the current channel. Click 'Mark as Done' to remove a message from the queue and notify the author.",
+          text: `*:two: Use the \`/${process.env.SLASH_COMMAND_NAME}\` command*. Type \`/${process.env.SLASH_COMMAND_NAME}\` to see a list of messages that need to be reviewed in the current channel. Click 'Mark as Done' to remove a message from the queue and notify the author.`,
         },
       },
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: ":three: *Add @reviewq to a channel* by typing `/invite @ReviewQ` from the channel. Say any of the following to get started with the bot:",
+          text: `:three: *Add @${process.env.BOT_NAME} to a channel* by typing \`/invite @${process.env.BOT_NAME}\` from the channel. Say any of the following to get started with the bot:`,
         },
       },
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "• *@ReviewQ add [text]* to add [text] to your queue\n• *@ReviewQ add* in a thread to add the parent message to the queue\n• *@ReviewQ list* to see existing messages in the channel queue",
+          text: `• *@${process.env.BOT_NAME} add [text]* to add [text] to your queue\n• *@${process.env.BOT_NAME} add* in a thread to add the parent message to the queue\n• *@${process.env.BOT_NAME} list* to see existing messages in the channel queue`,
         },
 
       },
@@ -187,7 +137,7 @@ export class View {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "If you authorize ReviewQ to see which channels you're part of, you'll be able to manage all your queues right here right now",
+        text: `If you authorize ${process.env.APP_NAME} to see which channels you're part of, you'll be able to manage all your queues right here right now`,
       },
     },
     {
@@ -209,7 +159,7 @@ export class View {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*Hi <@${userSlackId}>! Welcome to ReviewQ*`,
+        text: `*Hi <@${userSlackId}>! Welcome to ${process.env.APP_NAME}*`,
       },
     });
 
@@ -217,7 +167,7 @@ export class View {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `ReviewQ helps you turn Slack messages into tasks so you can make sure nothing slips through the cracks. Use it to make sure contracts, questions, pull requests, and much more get reviewed and responded to.`,
+        text: `${process.env.APP_NAME} helps you turn Slack messages into tasks so you can make sure nothing slips through the cracks. Use it to make sure contracts, questions, pull requests, and much more get reviewed and responded to.`,
       },
     });
 

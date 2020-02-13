@@ -131,14 +131,16 @@ test("paginate - close list", async () => {
 });
 
 test("paginate - next or previous", async () => {
+  const team = await setupTeam().save();
+  const channel = setupChannel(team, false);
   const paginationButtonValue = {
     reverse: false,
     start: 1,
     text: "Next",
   };
   const action = { name: "name", type: "type", action_id: JSON.stringify(paginationButtonValue) };
-  const event = new InteractiveMessageEvent({ actions: [action] });
-  event.channel = new Channel();
+  const event = new InteractiveMessageEvent({ team_id: team.slackId, user_id: "test", actions: [action] });
+  event.channel = channel;
   event.channel.postItemsList = jest.fn();
   event.response_url = "response_url";
   await event.paginate();

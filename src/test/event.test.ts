@@ -57,13 +57,6 @@ test("hasExistingTeam() finds team", async () => {
   expect(await event.findTeam()).toStrictEqual(team);
 });
 
-test("hasExistingTeam() doesn't find team", async () => {
-  const team = await setupTeam().save();
-  const event = new Event();
-  event.team_id = "chicken";
-  expect(await event.findTeam()).toStrictEqual(undefined);
-});
-
 test("findOrCreateSlackObjects() finds channel and user", async () => {
   const team = await setupTeam().save();
   const user = await setupUser(team).save();

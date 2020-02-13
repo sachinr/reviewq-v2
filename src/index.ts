@@ -1,18 +1,43 @@
+declare global {
+  namespace NodeJS {
+    // tslint:disable-next-line: interface-name
+    interface Global {
+      __rootdir__: string;
+    }
+  }
+}
+
+global.__rootdir__ = __dirname || process.cwd();
+
 import "reflect-metadata";
 
+import { RewriteFrames } from "@sentry/integrations";
+import * as Sentry from "@sentry/node";
 import * as bodyParser from "body-parser";
 import dotenv from "dotenv";
-import express from "express";
-import { ConnectionOptions, createConnection } from "typeorm";
-
-import { Routes } from "./routes";
-
+import express, { NextFunction, Request, Response } from "express";
 import * as PostgressConnectionStringParser from "pg-connection-string";
 import sourcemap from "source-map-support";
+import { ConnectionOptions, createConnection } from "typeorm";
+
+import { CommandController } from "./controller/CommandController";
+import { EventController } from "./controller/EventController";
+import { IndexController } from "./controller/IndexController";
+import { InteractiveMessageController } from "./controller/InteractiveMessageController";
+import { OAuthController } from "./controller/OAuthController";
+import { InteractiveMessageEvent } from "./entity/InteractiveMessageEvent";
 
 // initialize configuration
 dotenv.config();
 sourcemap.install();
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV,
+  integrations: [new RewriteFrames({
+    root: global.__rootdir__,
+  })],
+});
 
 let connectionOptions;
 if (process.env.DATABASE_URL) {
@@ -41,29 +66,41 @@ createConnection({
   };
 
   // setup express app here
+  // Sentry must be first middleware
+  app.use(Sentry.Handlers.requestHandler() as express.RequestHandler);
   app.use(bodyParser.urlencoded({ verify: rawBodySaver, extended: true }));
   app.use(bodyParser.json({ verify: rawBodySaver }));
   app.use(express.static("public"));
 
-  // register express routes from defined application routes
-  Routes.forEach((route) => {
-    // tslint:disable-next-line: ban-types
-    (app as any)[route.method](route.route, (req: express.Request, res: express.Response, next: Function) => {
-      const result = (new (route.controller as any)())[route.action](req, res, next);
-      if (result instanceof Promise) {
-        // tslint:disable-next-line: no-shadowed-variable
-        result.then((result) => result !== null && result !== undefined ? res.send(result) : undefined);
-      } else if (result !== null && result !== undefined) {
-        res.json(result);
-      }
-    });
+  app.get("/", (req, res, next) =>  {
+    new IndexController().index(req, res, next);
   });
+
+  app.get("/oauth", (req, res, next) =>  {
+    new OAuthController().oauth(req, res, next);
+  });
+
+  app.get("/install", (req, res, next) =>  {
+    new OAuthController().install(req, res, next);
+  });
+
+  app.post("/events", (req, res, next) =>  {
+    new EventController().event(req, res, next);
+  });
+
+  app.post("/interactive-message", (req, res, next) =>  {
+    new InteractiveMessageController().interactiveMessage(req, res, next);
+  });
+
+  app.post("/commands", (req, res, next) =>  {
+    new CommandController().commands(req, res, next);
+  });
+
+  app.use(Sentry.Handlers.errorHandler() as express.ErrorRequestHandler);
 
   // start express server
   app.listen(process.env.PORT);
 
   // tslint:disable-next-line: no-console
-  console.log(`${process.env.NODE_ENV} // Express server has started on port ${process.env.PORT}`);
-
-  // tslint:disable-next-line: no-console
-}).catch((error) => console.log(error));
+  console.log(`${process.env.NODE_ENV} // ${global.__rootdir__} // Express server has started on port ${process.env.PORT}`);
+});

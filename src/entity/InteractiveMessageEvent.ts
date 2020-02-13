@@ -56,7 +56,7 @@ export class InteractiveMessageEvent {
 
   public async findTeam(): Promise<Team> {
     if (!this.team) {
-      const team = await Team.findOne({ where: { slackId: this.message?.team || this.team_id } });
+      const team = await Team.findOneOrFail({ where: { slackId: this.message?.team || this.team_id } });
       this.team = team;
     }
 

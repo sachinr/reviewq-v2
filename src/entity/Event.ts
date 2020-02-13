@@ -63,7 +63,7 @@ export class Event {
 
   public async findTeam(): Promise<Team> {
     if (!this.team) {
-      const team = await Team.findOne({ where: { slackId: this.team_id } });
+      const team = await Team.findOneOrFail({ where: { slackId: this.team_id } });
       this.team = team;
     }
 

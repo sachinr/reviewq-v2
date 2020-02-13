@@ -3,54 +3,51 @@ import { NextFunction, Request, Response } from "express";
 import { InteractiveMessageEvent } from "../entity/InteractiveMessageEvent";
 import { verifySignature } from "../helpers/slackVerificationHelper";
 
-import { Channel } from "../entity/Channel";
-import { View } from "../entity/View";
-
 export class InteractiveMessageController {
 
   public async interactiveMessage(request: Request, response: Response, next: NextFunction) {
-    if (verifySignature(request)) {
-      const payload = this.parseBody(request.body.payload);
-      // tslint:disable-next-line: no-console
-      console.log(request.body.payload);
-      const interactiveMsg = new InteractiveMessageEvent(payload);
-      if (interactiveMsg.findTeam()) {
-        response.send("");
-        if (interactiveMsg.type === "block_actions") {
-          switch (interactiveMsg.initiatingAction.value) {
-            case "pagination":
-              await interactiveMsg.paginate();
-              break;
-            case "complete_item":
-              await interactiveMsg.completeItem();
-              break;
-            case "undo":
-              await interactiveMsg.undoCompleteItem();
-              break;
-            case "view_all_modal":
-              await interactiveMsg.openItemsModal();
-              break;
-            case "help":
-              await interactiveMsg.openHelpModal();
-              break;
-            default:
-              break;
-          }
-        } else {
-          switch (interactiveMsg.callback_id) {
-            case "top_level_actions":
-              await interactiveMsg.topLevelActions();
-              break;
-            case "message_action_add":
-              await interactiveMsg.addItemAndNotify();
-              break;
-            default:
-              break;
+    try {
+      if (verifySignature(request)) {
+        const payload = this.parseBody(request.body.payload);
+        const interactiveMsg = new InteractiveMessageEvent(payload);
+        if (interactiveMsg.findTeam()) {
+          response.send("");
+          if (interactiveMsg.type === "block_actions") {
+            switch (interactiveMsg.initiatingAction.value) {
+              case "pagination":
+                await interactiveMsg.paginate();
+                break;
+              case "complete_item":
+                await interactiveMsg.completeItem();
+                break;
+              case "undo":
+                await interactiveMsg.undoCompleteItem();
+                break;
+              case "view_all_modal":
+                await interactiveMsg.openItemsModal();
+                break;
+              case "help":
+                await interactiveMsg.openHelpModal();
+                break;
+              default:
+                break;
+            }
+          } else {
+            switch (interactiveMsg.callback_id) {
+              case "top_level_actions":
+                await interactiveMsg.topLevelActions();
+                break;
+              case "message_action_add":
+                await interactiveMsg.addItemAndNotify();
+                break;
+              default:
+                break;
+            }
           }
         }
-      } else {
-        response.sendStatus(500);
       }
+    } catch (error) {
+      next(error);
     }
   }
 

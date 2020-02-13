@@ -69,7 +69,7 @@ export class OAuthController {
 
         response.redirect(`slack://app?id=${result.app_id}&team=${result.team.id}&tab=home`);
       } else {
-        return result.response_metadata;
+        return response.send(500);
       }
     }
   }

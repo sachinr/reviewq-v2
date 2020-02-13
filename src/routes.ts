@@ -15,6 +15,11 @@ export const Routes = [{
   method: "get",
   route: "/oauth",
 }, {
+  action: "install",
+  controller: OAuthController,
+  method: "get",
+  route: "/install",
+}, {
   action: "event",
   controller: EventController,
   method: "post",

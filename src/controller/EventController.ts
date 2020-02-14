@@ -31,6 +31,7 @@ export class EventController {
                   break;
               }
             }
+            break;
           default:
             throw new Error(JSON.stringify(request.body));
         }

@@ -93,7 +93,7 @@ export class View {
           text: "image1",
           emoji: true,
         },
-        image_url: "https://api.slack.com/img/blocks/bkb_template_images/onboardingComplex.jpg",
+        image_url: "http://reviewq.sachinr.com:4444/app-action-message-pane.png",
         alt_text: "image1",
       },
       {

@@ -84,7 +84,6 @@ export class InteractiveMessageEvent {
         let channel = await Channel.findOne({
           where: {
             slackId: this.channel_id,
-            teamId: In([this.authedTeam.id, this.eventTeam.id]),
           },
         });
 
@@ -101,7 +100,6 @@ export class InteractiveMessageEvent {
           this.channel = await Channel.findOne({
             where: {
               slackId: actionId.channel,
-              teamId: In([this.authedTeam.id, this.eventTeam.id]),
             },
           });
         }

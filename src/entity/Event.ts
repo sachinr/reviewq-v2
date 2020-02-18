@@ -89,7 +89,6 @@ export class Event {
       let channel = await Channel.findOne({
         where: {
           slackId: this.event.channel,
-          teamId: In([this.authedTeam.id, this.eventTeam.id]),
         },
       });
 

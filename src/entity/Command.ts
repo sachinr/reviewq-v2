@@ -33,7 +33,7 @@ export class Command {
       let channel = await Channel.findOne({
         where: {
           slackId: this.channel_id,
-          teamId: this.team_id,
+          teamId: this.team.id,
         },
       });
 

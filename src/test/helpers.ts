@@ -10,9 +10,9 @@ const randomString = () => {
 export const setupTeam = () => {
   const team = new Team();
   team.name = randomString();
-  team.slackId = "T1234";
-  team.botSlackId = "B1234";
-  team.botToken = "xoxb-1234-1234";
+  team.slackId = randomString();
+  team.botSlackId = randomString();
+  team.botToken = "xoxb-1234-1234" + randomString();
   team.scope = "app_mention,users:read";
 
   return team;

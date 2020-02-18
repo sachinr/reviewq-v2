@@ -12,7 +12,7 @@ export class InteractiveMessageController {
         // tslint:disable-next-line: no-console
         console.log(payload);
         const interactiveMsg = new InteractiveMessageEvent(payload);
-        if (interactiveMsg.findTeam()) {
+        if (interactiveMsg.findTeams()) {
           response.send("");
           if (interactiveMsg.type === "block_actions") {
             switch (interactiveMsg.initiatingAction.value) {

@@ -31,7 +31,10 @@ export class Command {
   public async findOrCreateSlackObjects(): Promise<Command> {
     if (await this.findTeam()) {
       let channel = await Channel.findOne({
-        where: { slackId: this.channel_id, teamId: this.team.id },
+        where: {
+          slackId: this.channel_id,
+          teamId: this.team_id,
+        },
       });
 
       if (!channel) {

@@ -16,7 +16,7 @@ export class EventController {
           case "event_callback":
             response.sendStatus(200);
             const slackEvent: Event = Object.assign(new Event(), request.body);
-            if (await slackEvent.findTeam()) {
+            if (await slackEvent.findTeams()) {
               switch (true) {
                 case slackEvent.isMessageType():
                   slackEvent.processMessageEvent();

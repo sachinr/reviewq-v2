@@ -1,3 +1,5 @@
+import { In } from "typeorm";
+
 import { Channel } from "./Channel";
 import { ISlackMessage } from "./Event";
 import { Item } from "./Item";
@@ -39,8 +41,10 @@ export class InteractiveMessageEvent {
     root_view_id: string;
     hash: string;
   };
+  public app_installed_team_id: string;
 
-  public team: Team;
+  public authedTeam: Team;
+  public eventTeam: Team;
   public channel: Channel;
   public user: User;
   public initiatingAction: IAction;
@@ -54,26 +58,40 @@ export class InteractiveMessageEvent {
     }
   }
 
-  public async findTeam(): Promise<Team> {
-    if (!this.team) {
-      const team = await Team.findOneOrFail({ where: { slackId: this.message?.team || this.team_id } });
-      this.team = team;
+  public async findTeams(): Promise<Team> {
+    if (!this.authedTeam) {
+      const authedTeamSlackId = this.app_installed_team_id || this.team_id;
+      this.authedTeam = await Team.findOne({ where: { slackId: authedTeamSlackId } });
+
+      const eventSlackId = this.message?.team || this.team_id;
+      if (eventSlackId !== this.app_installed_team_id) {
+        this.eventTeam = await Team.findOne({ where: { slackId: eventSlackId }});
+        if (!this.eventTeam) {
+          this.eventTeam = new Team();
+          this.eventTeam = await this.eventTeam.fetchInfo(eventSlackId, this.authedTeam.botToken);
+        }
+      } else {
+        this.eventTeam = this.authedTeam;
+      }
     }
 
-    return this.team;
+    return this.authedTeam;
   }
 
   public async findOrCreateSlackObjects(): Promise<InteractiveMessageEvent> {
-    if (await this.findTeam()) {
+    if (await this.findTeams()) {
       if (this.channel_id) {
         let channel = await Channel.findOne({
-          where: { slackId: this.channel_id, teamId: this.team.id },
+          where: {
+            slackId: this.channel_id,
+            teamId: In([this.authedTeam.id, this.eventTeam.id]),
+          },
         });
 
         if (!channel) {
           channel = new Channel();
           channel.slackId = this.channel_id;
-          channel.team = this.team;
+          channel.team = this.authedTeam;
           await channel.save();
         }
         this.channel = channel;
@@ -83,6 +101,7 @@ export class InteractiveMessageEvent {
           this.channel = await Channel.findOne({
             where: {
               slackId: actionId.channel,
+              teamId: In([this.authedTeam.id, this.eventTeam.id]),
             },
           });
         }
@@ -95,7 +114,7 @@ export class InteractiveMessageEvent {
       if (!user) {
         user = new User();
         user.slackId = userId;
-        user.team = this.team;
+        user.team = this.eventTeam;
         await user.fetchProfile();
         await user.save();
       }
@@ -181,7 +200,7 @@ export class InteractiveMessageEvent {
   public async openHelpModal() {
     await this.findOrCreateSlackObjects();
     const channel = new Channel();
-    channel.team = this.team;
+    channel.team = this.authedTeam;
     channel.openHelpModal(this.trigger_id);
   }
 }

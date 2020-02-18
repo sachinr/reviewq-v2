@@ -1,4 +1,4 @@
-import {createConnection, getConnection, getRepository} from "typeorm";
+import {createConnection, getConnection, getRepository, QueryFailedError} from "typeorm";
 
 import {setupChannel, setupTeam, setupUser} from "./helpers";
 
@@ -53,8 +53,8 @@ afterEach(() => {
 test("hasExistingTeam() finds team", async () => {
   const team = await setupTeam().save();
   const event = new Event();
-  event.team_id = "T1234";
-  expect(await event.findTeam()).toStrictEqual(team);
+  event.team_id = team.slackId;
+  expect(await event.findTeams()).toStrictEqual(team);
 });
 
 test("findOrCreateSlackObjects() finds channel and user", async () => {
@@ -77,7 +77,7 @@ test("findOrCreateSlackObjects() finds channel and user", async () => {
   };
 
   await slackEvent.findOrCreateSlackObjects();
-  expect(slackEvent.team.id).toBe(team.id);
+  expect(slackEvent.authedTeam.id).toBe(team.id);
   expect(slackEvent.user.id).toBe(user.id);
   expect(slackEvent.channel.id).toBe(channel.id);
 });
@@ -175,7 +175,7 @@ test("isMemberJoined", async () => {
   const team = setupTeam();
   team.botSlackId = "bot_slack_id";
   const event = new Event();
-  event.team = team;
+  event.authedTeam = team;
   event.event = {
     attachments: [],
     blocks: [],
@@ -197,7 +197,7 @@ test("findUserCommands", async () => {
   const team = setupTeam();
   team.botSlackId = "bot_slack_id";
   const event = new Event();
-  event.team = team;
+  event.authedTeam = team;
   event.event = {
     attachments: [],
     blocks: [],
@@ -229,7 +229,7 @@ test("posts help in channel", async () => {
 
   const event = new Event();
   event.findOrCreateSlackObjects = jest.fn();
-  event.team = team;
+  event.authedTeam = team;
   event.channel = channel;
   event.event = {
     attachments: [],
@@ -256,7 +256,7 @@ test("posts help in DM", async () => {
 
   const event = new Event();
   event.findOrCreateSlackObjects = jest.fn();
-  event.team = team;
+  event.authedTeam = team;
   event.channel = channel;
   event.event = {
     attachments: [],
@@ -273,4 +273,83 @@ test("posts help in DM", async () => {
   await event.processMessageEvent();
   expect(event.findUserCommand()).toBe("other");
   expect(channel.postHelpMessage).toBeCalledTimes(1);
+});
+
+test("finds event team", async () => {
+  const team = await setupTeam().save();
+  const team2 = await setupTeam().save();
+  const user = await setupUser(team).save();
+  const channel = await setupChannel(team, false).save();
+  const slackEvent = new Event();
+  slackEvent.authed_teams = [team2.slackId];
+  slackEvent.team_id = team.slackId;
+  slackEvent.event = {
+    attachments: [],
+    blocks: [],
+    bot_id: "",
+    channel: channel.slackId,
+    event_ts: "123",
+    team: "",
+    text: "test",
+    ts: "1234",
+    type: "message",
+    user: user.slackId,
+  };
+
+  await slackEvent.findOrCreateSlackObjects();
+  expect(slackEvent.authedTeam.id).toBe(team2.id);
+  expect(slackEvent.eventTeam.id).toBe(team.id);
+});
+
+test("created channels belong to authed team", async () => {
+  const team = await setupTeam().save();
+  const team2 = await setupTeam().save();
+  const user = await setupUser(team).save();
+  const slackEvent = new Event();
+  slackEvent.authed_teams = [team2.slackId];
+  slackEvent.team_id = team.slackId;
+  slackEvent.event = {
+    attachments: [],
+    blocks: [],
+    bot_id: "",
+    channel: "C1245",
+    event_ts: "123",
+    team: "",
+    text: "test",
+    ts: "1234",
+    type: "message",
+    user: user.slackId,
+  };
+
+  await slackEvent.findOrCreateSlackObjects();
+  expect(slackEvent.channel.team.id).toBe(team2.id);
+});
+
+test("channel cannot belong to unrelated team", async () => {
+  const team = await setupTeam().save();
+  const team2 = await setupTeam().save();
+  const team3 = await setupTeam().save();
+  const channel = await setupChannel(team3, false).save();
+  const user = await setupUser(team).save();
+  const slackEvent = new Event();
+  slackEvent.authed_teams = [team2.slackId];
+  slackEvent.team_id = team.slackId;
+  slackEvent.event = {
+    attachments: [],
+    blocks: [],
+    bot_id: "",
+    channel: channel.slackId,
+    event_ts: "123",
+    team: "",
+    text: "test",
+    ts: "1234",
+    type: "message",
+    user: user.slackId,
+  };
+
+  try {
+    await slackEvent.findOrCreateSlackObjects();
+  } catch (err) {
+    expect(err.name).toBe("QueryFailedError");
+  }
 });

@@ -1,4 +1,5 @@
 import { Block } from "@slack/types";
+import { In } from "typeorm";
 
 import { Channel } from "./Channel";
 import { Item } from "./Item";
@@ -54,32 +55,48 @@ export class Event {
   public team_id: string;
   public type: string;
   public authed_users: string[];
+  public authed_teams: string[];
   public event_id: string;
   public event_time: number;
   public event: ISlackEventBody;
-  public team: Team;
+
+  public authedTeam: Team;
+  public eventTeam: Team;
   public channel: Channel;
   public user: User;
 
-  public async findTeam(): Promise<Team> {
-    if (!this.team) {
-      const team = await Team.findOneOrFail({ where: { slackId: this.team_id } });
-      this.team = team;
+  public async findTeams(): Promise<Team> {
+    if (!this.authedTeam) {
+      const authedTeamSlackId = this.authed_teams ? this.authed_teams[0] : this.team_id;
+      this.authedTeam = await Team.findOne({ where: { slackId: authedTeamSlackId } });
+
+      if (this.team_id !== authedTeamSlackId) {
+        this.eventTeam = await Team.findOne({ where: { slackId: this.team_id }});
+        if (!this.eventTeam) {
+          this.eventTeam = new Team();
+          this.eventTeam = await this.eventTeam.fetchInfo(this.team_id, this.authedTeam.botToken);
+        }
+      } else {
+        this.eventTeam = this.authedTeam;
+      }
     }
 
-    return this.team;
+    return this.authedTeam;
   }
 
   public async findOrCreateSlackObjects(): Promise<Event> {
-    if (await this.findTeam()) {
+    if (await this.findTeams()) {
       let channel = await Channel.findOne({
-        where: { slackId: this.event.channel, teamId: this.team.id },
+        where: {
+          slackId: this.event.channel,
+          teamId: In([this.authedTeam.id, this.eventTeam.id]),
+        },
       });
 
       if (!channel) {
         channel = new Channel();
         channel.slackId = this.event.channel;
-        channel.team = this.team;
+        channel.team = this.authedTeam;
         await channel.save();
       }
       this.channel = channel;
@@ -89,7 +106,7 @@ export class Event {
       if (!user) {
         user = new User();
         user.slackId = this.event.user;
-        user.team = this.team;
+        user.team = this.eventTeam;
         await user.fetchProfile();
         await user.save();
       }
@@ -112,7 +129,7 @@ export class Event {
   }
 
   public isMemberJoined() {
-    return this.event.type === "member_joined_channel" && this.event.user === this.team.botSlackId;
+    return this.event.type === "member_joined_channel" && this.event.user === this.authedTeam.botSlackId;
   }
 
   public appHomeOpened() {
@@ -132,8 +149,8 @@ export class Event {
   }
 
   public async processMessageEvent() {
-    if (await this.findTeam()) {
-      if (this.event.user !== this.team.botSlackId) {
+    if (await this.findTeams()) {
+      if (this.event.user !== this.authedTeam.botSlackId) {
         await this.findOrCreateSlackObjects();
         switch (this.findUserCommand()) {
           case "directAdd":
@@ -174,9 +191,9 @@ export class Event {
 
   private userCommands() {
     return {
-      atMentionAdd: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> add`),
-      atMentionHelp: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> help`),
-      atMentionList: new RegExp(`^<@${this.team.botSlackId.toLowerCase()}> list`),
+      atMentionAdd: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> add`),
+      atMentionHelp: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> help`),
+      atMentionList: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> list`),
       directAdd: /^add/,
       directList: /^list/,
     };

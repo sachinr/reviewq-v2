@@ -18,7 +18,7 @@ interface IOAuthV2AccessResult extends WebAPICallResult {
     id: string;
     name: string;
   };
-  enterprise: null;
+  enterprise: null | { id: string, name: string };
 }
 
 export class OAuthController {
@@ -47,7 +47,7 @@ export class OAuthController {
           team.scope = result.scope;
           team.slackId = result.team.id;
           team.name = result.team.name;
-          team.slackEnterpriseId = result.enterprise;
+          team.slackEnterpriseId = result.enterprise?.id;
           team.botSlackId = result.bot_user_id;
           team.botToken = result.access_token;
           await team.save();

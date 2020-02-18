@@ -46,8 +46,8 @@ test("store team and fetch it", async () => {
   const teams = await getRepository(Team).find();
   expect(teams.length).toBe(1);
   expect(teams[0].name).toBe(team.name);
-  expect(teams[0].botSlackId).toBe("B1234");
-  expect(teams[0].botToken).toBe("xoxb-1234-1234");
+  expect(teams[0].botSlackId).toBe(team.botSlackId);
+  expect(teams[0].botToken).toBe(team.botToken);
 });
 
 test("team should have users", async () => {

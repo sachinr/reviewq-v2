@@ -1,7 +1,7 @@
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import nodeFetch from "node-fetch";
 import { BaseEntity, BeforeInsert, BeforeUpdate, Between, Column,
-  Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Unique } from "typeorm";
+  Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 
 import { ISlackMessage } from "./Event";
 import { Item } from "./Item";
@@ -39,13 +39,12 @@ interface IReactionGetResult extends WebAPICallResult {
   message: ISlackMessage;
 }
 
-@Unique(["slackId", "teamId"])
 @Entity()
 export class Channel extends BaseEntity {
   @PrimaryGeneratedColumn()
   public id: number;
 
-  @Column()
+  @Column({ unique: true })
   public slackId: string;
 
   @Column()

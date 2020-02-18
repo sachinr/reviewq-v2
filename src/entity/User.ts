@@ -113,22 +113,24 @@ export class User extends BaseEntity {
 
   public async fetchProfile() {
     try {
-      const client = new WebClient(this.team.botToken);
-      const result = await client.users.info({
-        user: this.slackId,
-      }) as IUsersInfoCallResult;
+      if (this.team.botToken) {
+        const client = new WebClient(this.team.botToken);
+        const result = await client.users.info({
+          user: this.slackId,
+        }) as IUsersInfoCallResult;
 
-      const resUser = result.user;
-      this.isAdmin = resUser.is_admin;
-      this.isOwner = resUser.is_owner;
-      this.isPrimaryOwner = resUser.is_primary_owner;
-      this.isRestricted = resUser.is_restricted;
-      this.isUltraRestricted = resUser.is_ultra_restricted;
-      this.firstName = resUser.profile.first_name;
-      this.lastName = resUser.profile.last_name;
-      this.avatar24 = resUser.profile.image_24;
-      this.displayName = resUser.profile.display_name;
-      this.realName = resUser.profile.real_name;
+        const resUser = result.user;
+        this.isAdmin = resUser.is_admin;
+        this.isOwner = resUser.is_owner;
+        this.isPrimaryOwner = resUser.is_primary_owner;
+        this.isRestricted = resUser.is_restricted;
+        this.isUltraRestricted = resUser.is_ultra_restricted;
+        this.firstName = resUser.profile.first_name;
+        this.lastName = resUser.profile.last_name;
+        this.avatar24 = resUser.profile.image_24;
+        this.displayName = resUser.profile.display_name;
+        this.realName = resUser.profile.real_name;
+      }
     } catch (error) {
       // tslint:disable-next-line: no-console
       console.log(error);

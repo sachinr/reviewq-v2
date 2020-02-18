@@ -6,6 +6,8 @@ export class EventController {
   public async event(request: Request, response: Response, next: NextFunction) {
     try {
       if (verifySignature(request)) {
+        // tslint:disable-next-line: no-console
+        console.log(request.body);
         switch (request.body.type) {
           case "url_verification":
             response.send({ challenge: request.body.challenge });

@@ -9,6 +9,8 @@ export class InteractiveMessageController {
     try {
       if (verifySignature(request)) {
         const payload = this.parseBody(request.body.payload);
+        // tslint:disable-next-line: no-console
+        console.log(payload);
         const interactiveMsg = new InteractiveMessageEvent(payload);
         if (interactiveMsg.findTeam()) {
           response.send("");

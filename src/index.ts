@@ -1,3 +1,4 @@
+// for Sentry
 declare global {
   namespace NodeJS {
     // tslint:disable-next-line: interface-name
@@ -40,6 +41,7 @@ Sentry.init({
 });
 
 let connectionOptions;
+// Heroku sets DATABASE_URL env var
 if (process.env.DATABASE_URL) {
   connectionOptions = PostgressConnectionStringParser.parse(process.env.DATABASE_URL);
 }
@@ -59,21 +61,27 @@ createConnection({
 } as ConnectionOptions).then(async (connection) => {
   const app = express();
 
+  // add rawBody to request object so that Slack signatures can be verified. See custom.d.ts
   const rawBodySaver = (req: express.Request, res: express.Response, buf: Buffer, encoding: string) => {
     if (buf && buf.length) {
       req.rawBody = buf.toString(encoding || "utf8");
     }
   };
 
-  // setup express app here
   // Sentry must be first middleware
   app.use(Sentry.Handlers.requestHandler() as express.RequestHandler);
+  // add rawBody to request for signature verification
   app.use(bodyParser.urlencoded({ verify: rawBodySaver, extended: true }));
   app.use(bodyParser.json({ verify: rawBodySaver }));
+  // serve any static assets in public folder
   app.use(express.static("public"));
 
   app.get("/", (req, res, next) =>  {
-    new IndexController().index(req, res, next);
+    if (process.env.NODE_ENV === "development") {
+      new IndexController().index(req, res, next);
+    } else {
+      res.send(404);
+    }
   });
 
   app.get("/oauth", (req, res, next) =>  {
@@ -96,6 +104,7 @@ createConnection({
     new CommandController().commands(req, res, next);
   });
 
+  // must be after routes to catch errors passed to next()
   app.use(Sentry.Handlers.errorHandler() as express.ErrorRequestHandler);
 
   // start express server

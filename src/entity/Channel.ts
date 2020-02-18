@@ -83,11 +83,13 @@ export class Channel extends BaseEntity {
   @OneToMany((type) => Item, (item) => item.channel)
   public items: Item[];
 
+  // fetch channel latest channel info before saving
   @BeforeUpdate()
   @BeforeInsert()
   public async fetchInfo(user?: User): Promise<void> {
     let client = new WebClient(this.team.botToken);
-    if (user && user.token) {
+    // fetch channel info using user token if supplied - user might be in channels bot isn't
+    if (user?.token) {
       client = new WebClient(user.token);
     }
 
@@ -98,6 +100,7 @@ export class Channel extends BaseEntity {
         this.isExtShared = response.channel.is_ext_shared ? true : false;
         this.isGeneral = response.channel.is_general ? true : false;
         if (!user) {
+          // isMember refers to bot membership; don't change the value based on user membership
           this.isMember = response.channel.is_member ? true : false;
         }
         this.isOrgShared = response.channel.is_org_shared ? true : false;
@@ -111,6 +114,7 @@ export class Channel extends BaseEntity {
         }
       }
     } catch (error) {
+      // bot will get channel_not_found errors if slash_command or app_action used in private channel / DM
       if (error.data.error === "channel_not_found") {
         this.isMember = false;
         if (this.slackId[0] === "G") {
@@ -129,6 +133,7 @@ export class Channel extends BaseEntity {
 
   public async recentlyClosed(): Promise<Item[]> {
     const dateNow = new Date();
+    // finds items closed in the last minute. Allows undo functionality
     const dateThen = new Date(new Date().setMinutes(new Date().getMinutes() - 1));
     const findOperator = Between(dateThen, dateNow);
     return await Item.find({
@@ -139,6 +144,7 @@ export class Channel extends BaseEntity {
   }
 
   public async deleteMessage(ts: string, url?: string): Promise<boolean> {
+    // deletes a bot's message either via chat.delete or the response_url
     if (!url) {
       const client = new WebClient((this.team).botToken);
       const result = await client.chat.delete({
@@ -159,6 +165,7 @@ export class Channel extends BaseEntity {
   public async postInfo(preText: string, url?: string) {
     const message = new Message(this);
     await message.addSummary(preText);
+    // remind users to add bot to channel assuming the bot isn't already in the channel and the conversation isn't an IM
     if (!this.isMember && this.type !== "im") {
       message.addInvitePrompt();
     }
@@ -178,10 +185,12 @@ export class Channel extends BaseEntity {
     const closedItems = await this.recentlyClosed();
 
     let items = (openItems).concat(closedItems);
+    // sort combination of open and recently closed items by ID (ie. creation date)
     items = items.sort((a, b) => {
       return a.id <= b.id ? -1 : 1;
     });
 
+    // return open, recently closed, and all separately so UI can show counts of each
     return { open: openItems, recentlyCompleted: closedItems, all: items };
   }
 

@@ -3,7 +3,7 @@ import { BaseEntity, BeforeInsert, Column, CreateDateColumn,
 
 import { WebAPICallResult, WebClient } from "@slack/web-api";
 import { Channel } from "./Channel";
-import { Event, ISlackFile } from "./Event";
+import { Event } from "./Event";
 import { InteractiveMessageEvent } from "./InteractiveMessageEvent";
 import { Message } from "./Message";
 import { Team } from "./Team";
@@ -19,39 +19,62 @@ interface IChatPermalinkResult extends WebAPICallResult {
 export class Item extends BaseEntity {
 
   public static async createFromEvent(slackEvent: Event) {
-    let cleanText = await Item.cleanMessage(slackEvent.event.text, slackEvent.user.teamId);
+    const cleanText = await Item.cleanMessage(slackEvent.event.text, slackEvent.user.teamId);
 
     if (cleanText.length === 0 && slackEvent.event.thread_ts) {
       const parentMessage = await slackEvent.channel.fetchMessage(slackEvent.event.thread_ts);
-      slackEvent.channel.id = parentMessage.channel.id;
-      slackEvent.event.ts = parentMessage.ts;
-      slackEvent.event.files = parentMessage.files;
-      cleanText = await Item.cleanMessage(parentMessage.text, parentMessage.channel.teamId);
-    }
+      const parentUser = await User.findOrCreateFromSlackId(parentMessage.user, slackEvent.eventTeam);
 
-    let item = await Item.findOne({
-      where: { channelId: slackEvent.channel.id, ts: slackEvent.event.ts },
-    });
+      let item = await Item.findOne({
+        where: { channelId: slackEvent.channel.id, ts: parentMessage.ts },
+      });
 
-    if (item) {
-      if (item.complete) {
-        await item.markNotComplete();
+      if (item) {
+        if (item.complete) {
+          await item.markNotComplete();
+          await item.save();
+        }
+      } else {
+        item = new Item();
+        item.user = parentUser;
+        item.channel = slackEvent.channel;
+        item.ts = slackEvent.event.ts;
+        item.message = await Item.cleanMessage(parentMessage.text, parentMessage.channel.teamId);
+        item.createdBy = slackEvent.user;
+        if (parentMessage.files) {
+          item.filesJSON = JSON.stringify(parentMessage.files);
+        }
+
         await item.save();
       }
+
+      return item;
     } else {
-      item = new Item();
-      item.user = slackEvent.user;
-      item.channel = slackEvent.channel;
-      item.ts = slackEvent.event.ts;
-      item.message = cleanText;
-      if (slackEvent.event.files) {
-        item.filesJSON = JSON.stringify(slackEvent.event.files);
+      let item = await Item.findOne({
+        where: { channelId: slackEvent.channel.id, ts: slackEvent.event.ts },
+      });
+
+      if (item) {
+        if (item.complete) {
+          await item.markNotComplete();
+          await item.save();
+        }
+      } else {
+        item = new Item();
+        item.user = slackEvent.user;
+        item.channel = slackEvent.channel;
+        item.ts = slackEvent.event.ts;
+        item.message = cleanText;
+        item.createdBy = slackEvent.user;
+        if (slackEvent.event.files) {
+          item.filesJSON = JSON.stringify(slackEvent.event.files);
+        }
+
+        await item.save();
       }
 
-      await item.save();
+      return item;
     }
-
-    return item;
   }
 
   public static async createFromInteractiveMessage(slackEvent: InteractiveMessageEvent) {
@@ -66,7 +89,10 @@ export class Item extends BaseEntity {
       }
     } else {
       item = new Item();
-      item.user = slackEvent.user;
+      // tslint:disable-next-line: no-console
+      console.log(slackEvent);
+      item.createdBy = slackEvent.actionUser;
+      item.user = slackEvent.messageUser;
       item.channel = slackEvent.channel;
       item.ts = slackEvent.message.ts;
       item.message = slackEvent.message.text;
@@ -118,6 +144,9 @@ export class Item extends BaseEntity {
   public completedById: number;
 
   @Column({ nullable: true })
+  public createdById: number;
+
+  @Column({ nullable: true })
   public dateCompleted: Date;
 
   @Column({ default: false })
@@ -134,6 +163,9 @@ export class Item extends BaseEntity {
 
   @ManyToOne((type) => User, (user) => user.completedItems, { eager: true })
   public completedBy: User;
+
+  @ManyToOne((type) => User, (user) => user.createdItems, { eager: true })
+  public createdBy: User;
 
   @CreateDateColumn()
   public createdAt: Date;

@@ -58,6 +58,7 @@ export class Message {
   public ts: string;
   public unfurl_links?: boolean;
   public unfurl_media?: boolean;
+  public user: string;
   public username?: string;
 
   constructor(channel: Channel, options?: object) {

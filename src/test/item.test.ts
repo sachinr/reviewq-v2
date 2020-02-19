@@ -159,7 +159,8 @@ test("createFromInteractiveMessage - new item", async () => {
   const user = await setupUser(team).save();
 
   event.channel = channel;
-  event.user = user;
+  event.actionUser = user;
+  event.messageUser = user;
   event.message = {
     blocks: [],
     bot_id: "",
@@ -176,6 +177,35 @@ test("createFromInteractiveMessage - new item", async () => {
   expect(item.message).toBe("message_text");
   expect(item.ts).toBe("message_ts");
 });
+
+test("createFromInteractiveMessage - new item different users", async () => {
+  const event = new InteractiveMessageEvent({});
+  const team = await setupTeam().save();
+  const channel = await setupChannel(team, false).save();
+  const user = await setupUser(team).save();
+  const user2 = await setupUser(team).save();
+
+  event.channel = channel;
+  event.actionUser = user;
+  event.messageUser = user2;
+  event.message = {
+    blocks: [],
+    bot_id: "",
+    team: "",
+    text: "message_text",
+    ts: "message_ts",
+    type: "",
+    user: "",
+  };
+
+  const item = await Item.createFromInteractiveMessage(event);
+  expect(item.channel).toStrictEqual(channel);
+  expect(item.user).toStrictEqual(user2);
+  expect(item.createdBy).toStrictEqual(user);
+  expect(item.message).toBe("message_text");
+  expect(item.ts).toBe("message_ts");
+});
+
 
 test("createFromInteractiveMessage - previously closed item", async () => {
   const event = new InteractiveMessageEvent({});

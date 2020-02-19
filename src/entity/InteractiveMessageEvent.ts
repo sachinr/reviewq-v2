@@ -46,7 +46,8 @@ export class InteractiveMessageEvent {
   public authedTeam: Team;
   public eventTeam: Team;
   public channel: Channel;
-  public user: User;
+  public actionUser: User;
+  public messageUser: User;
   public initiatingAction: IAction;
 
   public constructor(interactiveMessagePayload: object) {
@@ -105,18 +106,18 @@ export class InteractiveMessageEvent {
         }
       }
 
-      const userId = this.message?.user || this.message?.bot_id || this.user_id;
+      const messageUserId = this.message?.user || this.message?.bot_id || this.user_id;
+      this.messageUser = await User.findOne({ where: { slackId: messageUserId } });
 
-      let user = await User.findOne({ where: { slackId: userId } });
-
-      if (!user) {
-        user = new User();
-        user.slackId = userId;
-        user.team = this.eventTeam;
-        await user.fetchProfile();
-        await user.save();
+      if (!this.messageUser) {
+        this.messageUser = await User.findOrCreateFromSlackId(messageUserId, this.eventTeam);
       }
-      this.user = user;
+
+      if (messageUserId === this.user_id) {
+        this.actionUser = this.messageUser;
+      } else {
+        this.actionUser = await User.findOrCreateFromSlackId(this.user_id, this.eventTeam);
+      }
     }
     return this;
   }
@@ -133,7 +134,7 @@ export class InteractiveMessageEvent {
     const completionInfo = JSON.parse(this.initiatingAction.action_id) as ICompleteButton;
     // TODO: Verify that interactiveMessage can't be spoofed
     const item = await Item.findOne(completionInfo.itemId);
-    await item.markComplete(this.user);
+    await item.markComplete(this.actionUser);
     if (this.view?.type === "modal") {
       this.channel.updateItemsModal(completionInfo.start, completionInfo.reverse,
         this.view.id, this.trigger_id);

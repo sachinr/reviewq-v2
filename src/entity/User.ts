@@ -46,6 +46,20 @@ interface IUsersInfoCallResult extends WebAPICallResult {
 @Entity()
 export class User extends BaseEntity {
 
+  public static async findOrCreateFromSlackId(slackId: string, team: Team) {
+    let user = await User.findOne({ where: { slackId } });
+
+    if (!user) {
+      user = new User();
+      user.slackId = slackId;
+      user.team = team;
+      await user.fetchProfile();
+      await user.save();
+    }
+
+    return user;
+  }
+
   @PrimaryGeneratedColumn()
   public id: number;
 
@@ -102,6 +116,9 @@ export class User extends BaseEntity {
 
   @OneToMany((type) => Item, (item) => item.completedBy)
   public completedItems: Item[];
+
+  @OneToMany((type) => Item, (item) => item.completedBy)
+  public createdItems: Item[];
 
   public fullName(): string {
     if (this.firstName) {

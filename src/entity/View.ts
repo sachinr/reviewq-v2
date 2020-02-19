@@ -316,6 +316,7 @@ export class View {
             type: "mrkdwn",
             text: `${item.message}` || "`No message text`",
           },
+          accessory: actionButton,
         } as SectionBlock,
       ];
 
@@ -339,11 +340,15 @@ export class View {
       }
 
       itemBlocks.push({
-        type: "actions",
+        type: "context",
         elements: [
-          actionButton,
+          {
+            type: "image",
+            image_url: "https://api.slack.com/img/blocks/bkb_template_images/placeholder.png",
+            alt_text: "placeholder",
+          },
         ],
-      } as ActionsBlock);
+      } as ContextBlock);
 
       itemBlocks.push({
         type: "divider",

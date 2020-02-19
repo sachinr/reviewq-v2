@@ -164,6 +164,7 @@ export class Channel extends BaseEntity {
 
   public async postInfo(preText: string, url?: string) {
     const message = new Message(this);
+    message.unfurl_links = true;
     await message.addSummary(preText);
     // remind users to add bot to channel assuming the bot isn't already in the channel and the conversation isn't an IM
     if (!this.isMember && this.type !== "im") {

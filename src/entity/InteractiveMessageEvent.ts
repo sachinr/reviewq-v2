@@ -184,7 +184,7 @@ export class InteractiveMessageEvent {
         this.channel.deleteMessage(this.message_ts, this.response_url);
         break;
       case "all":
-        this.channel.postItemsList(1, false, this.response_url);
+        this.channel.openItemsModal(this.trigger_id);
         break;
       default:
         break;

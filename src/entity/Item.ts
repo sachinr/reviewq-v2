@@ -193,7 +193,7 @@ export class Item extends BaseEntity {
   public async notify(notificationType: "created" | "completed", url?: string) {
     switch (notificationType) {
       case "created":
-        await (this.channel).postInfo("Item added! :white_check_mark:", url);
+        await (this.channel).postInfo(`:tada: A <${this.archiveLink}|new message> was added to the channel queue by <@${this.createdBy.slackId}>`, url);
         break;
       case "completed":
         if (this.complete) {

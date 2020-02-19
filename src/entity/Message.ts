@@ -60,6 +60,7 @@ export class Message {
   public unfurl_media?: boolean;
   public user: string;
   public username?: string;
+  public response_type?: "in_channel" | "ephemeral";
 
   constructor(channel: Channel, options?: object) {
     this.channel = channel;
@@ -107,6 +108,7 @@ export class Message {
     });
 
     this.replace_original = true;
+    this.response_type = "in_channel";
 
     return this;
   }

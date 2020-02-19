@@ -100,7 +100,7 @@ export class View {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*:one: Use the _Add to ${process.env.APP_NAME}_ action.* If you want to keep track of a message, select \`Add to ${process.env.APP_NAME}\` in a message's context menu (click the three dots when hovering over it). If you don't see it, click "More message actions...".`,
+          text: `*:one: Use the _Add to queue_ action.* If you want to keep track of a message, select \`Add to queue\` in a message's context menu (click the three dots when hovering over it). If you don't see it, click "More message actions...".`,
         },
       },
       {

@@ -186,6 +186,9 @@ export class InteractiveMessageEvent {
       case "all":
         this.channel.openItemsModal(this.trigger_id);
         break;
+      case "help":
+        this.channel.openHelpModal(this.trigger_id);
+        break;
       default:
         break;
     }

@@ -95,9 +95,11 @@ export class Message {
         text: "View all",
         type: "button",
         value: "all",
+        style: "primary",
       });
     }
 
+    actions.push({ name: "Help", text: "Help", type: "button", value: "help" });
     actions.push({ name: "Close", text: "Close", type: "button", value: "close" });
 
     this.attachments.push({

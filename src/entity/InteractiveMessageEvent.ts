@@ -142,6 +142,8 @@ export class InteractiveMessageEvent {
       await this.channel.postItemsList(completionInfo.start,
         completionInfo.reverse, this.response_url);
     }
+
+    await item.notify("completed");
   }
 
   public async undoCompleteItem() {

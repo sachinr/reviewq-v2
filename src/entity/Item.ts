@@ -203,7 +203,7 @@ export class Item extends BaseEntity {
             channel.slackId = itemUser.slackId;
             channel.team = await Team.findOne(this.user.teamId);
             await new Message(channel, {
-              text: `${this.archiveLink} was marked as complete by <@${this.completedBy.slackId}>`,
+              text: `:white_check_mark: <${this.archiveLink}|Your message> was marked as complete by <@${this.completedBy.slackId}>`,
             }).post(url);
           }
         }

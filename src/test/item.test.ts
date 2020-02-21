@@ -148,7 +148,7 @@ test("notify", async () => {
     blocks: [],
     channel: user.slackId,
     mrkdwn: true,
-    text: `${item.archiveLink} was marked as complete by <@${user2.slackId}>`,
+    text: `:white_check_mark: <${item.archiveLink}|Your message> was marked as complete by <@${user2.slackId}>`,
   });
 });
 

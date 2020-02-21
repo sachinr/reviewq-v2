@@ -64,10 +64,9 @@ test("paginates through open items", async () => {
   const message = new Message(channel);
   await message.addItems(items, 1, false);
   let actions = message.blocks[message.blocks.length - 1] as ActionsBlock;
-  expect(actions.elements.length).toBe(3);
+  expect(actions.elements.length).toBe(2);
   expect((actions.elements[0] as Button).text.text).toBe("Next");
   expect((actions.elements[1] as Button).text.text).toBe("Minimize");
-  expect((actions.elements[2] as Button).text.text).toBe("Sort");
   let paginationContext = message.blocks[message.blocks.length - 2] as ContextBlock;
   expect((paginationContext.elements[0] as PlainTextElement).text).toBe("Page 1 of 3");
 

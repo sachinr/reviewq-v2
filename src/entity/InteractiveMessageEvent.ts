@@ -18,6 +18,13 @@ export interface IAction {
     text: string;
   };
   action_ts?: string;
+  selected_option?: {
+    text: {
+      text: string,
+      type: string,
+    },
+    value: string,
+  };
 }
 
 export class InteractiveMessageEvent {
@@ -54,6 +61,9 @@ export class InteractiveMessageEvent {
     Object.assign(this, interactiveMessagePayload);
     if (this.actions) {
       this.initiatingAction = this.actions[0];
+      if (!this.initiatingAction.value && this.initiatingAction.selected_option) {
+        this.initiatingAction.value = this.initiatingAction.selected_option.value;
+      }
     } else {
       this.initiatingAction = { name: "Message Action", type: "Message Action", value: "Message Action" };
     }

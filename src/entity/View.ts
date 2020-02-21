@@ -38,12 +38,32 @@ export class View {
 
   public async addItems(items: Item[], start: number, reverse: boolean, summaryText?: string) {
     const paginationInfo = await this.getPaginationInfo(items, start, reverse);
-
+    let defaultSummaryText = "*Here are your items*";
+    defaultSummaryText = reverse ? `${defaultSummaryText} (newest to oldest):` : `${defaultSummaryText} (oldest to newest):`;
     this.blocks = [{
       type: "section",
       text: {
         type: "mrkdwn",
-        text: summaryText || "*Here are your items:*",
+        text: summaryText || defaultSummaryText,
+      },
+      accessory: {
+        type: "overflow",
+        action_id: JSON.stringify({
+          start: 1,
+          reverse: !reverse,
+          channel: this.channel.slackId,
+          text: "Sort",
+        } as IPaginationButton),
+        options: [
+          {
+            text: {
+              type: "plain_text",
+              text: reverse ? "Sort (oldest to newest)" : "Sort (newest to oldest)",
+              emoji: true,
+            },
+            value: "pagination",
+          },
+        ],
       },
     } as SectionBlock,
     {
@@ -423,7 +443,8 @@ export class View {
     }
 
     if (totalItems > 0) {
-      currentPageItems = items.slice(start - 1, end);
+      const i = reverse ? items.reverse() : items;
+      currentPageItems = i.slice(start - 1, end);
     }
 
     return {
@@ -456,11 +477,9 @@ export class View {
         channel: this.channel.slackId,
       });
     }
+
     if (this.type !== "modal") {
       buttons.push({ text: "Minimize", start: -1, reverse: pagination.reverse });
-      if (pagination.start === 1 && pagination.totalItems > 1) {
-        buttons.push({ text: "Sort", start: 1, reverse: !pagination.reverse });
-      }
     }
 
     const elements: Button[]  = [];

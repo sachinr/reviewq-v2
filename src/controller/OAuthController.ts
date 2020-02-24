@@ -66,8 +66,8 @@ export class OAuthController {
         user.installer = true;
         await user.fetchProfile();
         await user.save();
-
-        response.redirect(`slack://app?id=${result.app_id}&team=${result.team.id}&tab=home`);
+        response.render("success", { app: result.app_id, team: result.team.id});
+        // response.redirect(`slack://app?id=${result.app_id}&team=${result.team.id}&tab=home`);
       } else {
         return response.send(500);
       }

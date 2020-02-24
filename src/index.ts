@@ -60,6 +60,8 @@ createConnection({
   username: connectionOptions?.user || process.env.TYPEORM_USERNAME,
 } as ConnectionOptions).then(async (connection) => {
   const app = express();
+  // use ejs for views
+  app.set("view engine", "ejs");
 
   // add rawBody to request object so that Slack signatures can be verified. See custom.d.ts
   const rawBodySaver = (req: express.Request, res: express.Response, buf: Buffer, encoding: string) => {
@@ -73,8 +75,10 @@ createConnection({
   // add rawBody to request for signature verification
   app.use(bodyParser.urlencoded({ verify: rawBodySaver, extended: true }));
   app.use(bodyParser.json({ verify: rawBodySaver }));
+
   // serve any static assets in public folder
   app.use(express.static("public"));
+  app.use(express.static("views"));
 
   app.get("/", (req, res, next) =>  {
     if (process.env.NODE_ENV === "development") {

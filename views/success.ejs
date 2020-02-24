@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js" type="text/javascript"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic,700,700italic,800,800italic%7CChonburi:regular" media="all">
+    <link rel="stylesheet" href="app.css" media="all">
+    <script type="text/javascript">
+      WebFont.load({
+        google: {
+          families: ["Open Sans:300,300italic,400,400italic,600,600italic,700,700italic,800,800italic",
+            "Chonburi:regular"
+          ]
+        }
+      });
+    </script>
+    <script>
+      window.onload = function () {
+        window.location.href = "<%-`slack://app?id=${app}&team=${team}&tab=home`%>";
+      }
+    </script>
+</head>
+<body>
+  <div data-collapse="medium" data-animation="default" data-duration="400"
+    data-w-id="f57c36bc-09e0-faf5-d475-efc6528f9dd9" class="navbar w-nav"
+    style="will-change: background; background-color: rgba(255, 255, 255, 0);"><a href="/"
+      class="link-2 w--current">Reviewed</a>
+    <div class="w-nav-overlay" data-wf-ignore=""></div>
+  </div>
+  <section>
+    <div class="w-container">
+      <h2 class="heading-10">The app is installed and we're redirecting you back to Slack</h2>
+      <p style="text-align: center; font-family: Open Sans;">To get started, DM "help" to Reviewed</p>
+    </div>
+  </section>
+  <main></main>
+  <footer></footer>
+</body>

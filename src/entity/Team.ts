@@ -32,10 +32,10 @@ export class Team extends BaseEntity {
   @Column({ nullable: true })
   public scope: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ nullable: true })
   public botSlackId: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ nullable: true })
   public botToken: string;
 
   @OneToMany((type) => User, (user) => user.team)

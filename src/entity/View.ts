@@ -397,17 +397,12 @@ export class View {
     delete args.channel;
     args.type = "home";
     const client = new WebClient(this.channel.team.botToken);
-    try {
-      const result = await client.views.publish({
-        view: args,
-        user_id: user.slackId,
-      });
+    const result = await client.views.publish({
+      view: args,
+      user_id: user.slackId,
+    });
 
-      return result;
-    } catch (err) {
-      // tslint:disable-next-line: no-console
-      console.log(JSON.stringify(args), err, err.data.response_metadata);
-    }
+    return result;
   }
 
   public async update(viewId: string, triggerId: string) {

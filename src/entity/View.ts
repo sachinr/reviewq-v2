@@ -382,17 +382,14 @@ export class View {
     const args = Object.assign({}, this);
     delete args.channel;
     const client = new WebClient(this.channel.team.botToken);
-    try {
-      const result = await client.views.open({
-        trigger_id,
-        view: args,
-      });
+    // tslint:disable-next-line: no-console
+    console.log(args);
+    const result = await client.views.open({
+      trigger_id,
+      view: args,
+    });
 
-      return result;
-    } catch (err) {
-      // tslint:disable-next-line: no-console
-      console.log(JSON.stringify(args), err, err.data.response_metadata);
-    }
+    return result;
   }
 
   public async publish(user: User) {

@@ -278,14 +278,14 @@ export class Channel extends BaseEntity {
   }
 
   public async openItemsModal(triggerId: string) {
-    const view = new View(this, { type: "modal", title: { type: "plain_text", text: this.name }});
+    const view = new View(this, { type: "modal", title: { type: "plain_text", text: this.name || "Items" }});
     const items = (await this.openAndRecentlyClosedItems()).all;
     await view.addItems(items, 1, false);
     await view.open(triggerId);
   }
 
   public async updateItemsModal(start: number, reverse: boolean, viewId: string, triggerId: string) {
-    const view = new View(this, { type: "modal", title: { type: "plain_text", text: this.name }});
+    const view = new View(this, { type: "modal", title: { type: "plain_text", text: this.name || "Items" }});
     const items = (await this.openAndRecentlyClosedItems()).all;
     await view.addItems(items, start, reverse);
     await view.update(viewId, triggerId);

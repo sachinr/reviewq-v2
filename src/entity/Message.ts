@@ -1,6 +1,6 @@
 import { ActionsBlock, AttachmentAction, Block, MessageAttachment, SectionBlock } from "@slack/types";
 
-import { ChatPostMessageArguments, WebClient } from "@slack/web-api";
+import { ChatPostEphemeralArguments, ChatPostMessageArguments, WebClient } from "@slack/web-api";
 import nodeFetch from "node-fetch";
 import { Channel } from "./Channel";
 import { ISlackFile } from "./Event";
@@ -172,6 +172,24 @@ export class Message {
     } else {
       const client = new WebClient(this.channel.team.botToken);
       await client.chat.postMessage(args as ChatPostMessageArguments);
+    }
+  }
+
+  public async postEphemeral(slackUserId: string, url?: string) {
+    const args: any = Object.assign({}, this);
+    args.channel = this.channel.slackId;
+    if (url) {
+      args.response_type = "ephemeral";
+      await nodeFetch(url, { method: "post", body: JSON.stringify(args) });
+    } else {
+      args.user = slackUserId;
+      const client = new WebClient(this.channel.team.botToken);
+      try {
+        await client.chat.postEphemeral(args as ChatPostEphemeralArguments);
+      } catch (error) {
+        // tslint:disable-next-line: no-console
+        console.log(error.data);
+      }
     }
   }
 

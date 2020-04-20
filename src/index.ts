@@ -16,7 +16,7 @@ import { RewriteFrames } from "@sentry/integrations";
 import * as Sentry from "@sentry/node";
 import * as bodyParser from "body-parser";
 import dotenv from "dotenv";
-import express, { NextFunction, Request, Response } from "express";
+import express from "express";
 import * as PostgressConnectionStringParser from "pg-connection-string";
 import sourcemap from "source-map-support";
 import { ConnectionOptions, createConnection } from "typeorm";
@@ -26,7 +26,6 @@ import { EventController } from "./controller/EventController";
 import { IndexController } from "./controller/IndexController";
 import { InteractiveMessageController } from "./controller/InteractiveMessageController";
 import { OAuthController } from "./controller/OAuthController";
-import { InteractiveMessageEvent } from "./entity/InteractiveMessageEvent";
 
 // initialize configuration
 dotenv.config();

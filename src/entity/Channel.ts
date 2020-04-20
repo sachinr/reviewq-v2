@@ -163,14 +163,13 @@ export class Channel extends BaseEntity {
   }
 
   public async postInfo(preText: string, url?: string) {
-    const message = new Message(this);
-    message.unfurl_links = true;
-    await message.addSummary(preText);
-    // remind users to add bot to channel assuming the bot isn't already in the channel and the conversation isn't an IM
-    if (!this.isMember && this.type !== "im") {
-      message.addInvitePrompt();
-    }
+    const message = await this.generateInfoMessage(preText);
     await message.post(url);
+  }
+
+  public async postInfoEphemeral(slackUserId: string, preText: string) {
+    const message = await this.generateInfoMessage(preText);
+    await message.postEphemeral(slackUserId);
   }
 
   public async postWelcomeMessage() {
@@ -294,5 +293,17 @@ export class Channel extends BaseEntity {
   public async openHelpModal(triggerId: string) {
     const view = new View(this, { type: "modal", title: { type: "plain_text", text: process.env.APP_NAME }});
     await view.addHelp().open(triggerId);
+  }
+
+  private async generateInfoMessage(preText: string) {
+    const message = new Message(this);
+    message.unfurl_links = true;
+    await message.addSummary(preText);
+    // remind users to add bot to channel assuming the bot isn't already in the channel and the conversation isn't an IM
+    if (!this.isMember && this.type !== "im") {
+      message.addInvitePrompt();
+    }
+
+    return message;
   }
 }

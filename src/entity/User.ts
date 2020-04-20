@@ -178,4 +178,10 @@ export class User extends BaseEntity {
     await view.publish(this);
   }
 
+  public async openAuthoredItems() {
+    return await Item.find({
+      where: { userId: this.id, complete: false },
+    });
+  }
+
 }

@@ -11,7 +11,11 @@ export class CommandController {
         const command: Command = Object.assign(new Command(), request.body);
         if (await command.findTeam()) {
           await command.findOrCreateSlackObjects();
-          command.channel.postInfo("", command.response_url);
+          if (command.text === "private") {
+            command.channel.postInfoEphemeral(command.user_id, "");
+          } else {
+            command.channel.postInfo("", command.response_url);
+          }
         }
       }
     } catch (error) {

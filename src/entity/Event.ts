@@ -160,6 +160,9 @@ export class Event {
           case "atMentionAdd":
             await this.addItemAndNotify();
             break;
+          case "atMentionDone":
+            await this.updateItemAndNotify();
+            break;
           case "directList":
             if (this.event.channel[0] === "D") {
               this.channel.postItemsList(1, false);
@@ -188,9 +191,19 @@ export class Event {
     await item.notify("created");
   }
 
+  private async updateItemAndNotify() {
+    const item = await Item.findFromEvent(this);
+    if (item) {
+      await item.markComplete(this.user);
+      await item.save();
+      await item.notify("completed");
+    }
+  }
+
   private userCommands() {
     return {
       atMentionAdd: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> add`),
+      atMentionDone: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> done`),
       atMentionHelp: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> help`),
       atMentionList: new RegExp(`^<@${this.authedTeam.botSlackId.toLowerCase()}> list`),
       directAdd: /^add/,

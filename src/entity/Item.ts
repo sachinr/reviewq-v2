@@ -18,6 +18,28 @@ interface IChatPermalinkResult extends WebAPICallResult {
 @Unique(["channelId", "ts"])
 export class Item extends BaseEntity {
 
+  public static async findFromEvent(slackEvent: Event) {
+    const cleanText = await Item.cleanMessage(slackEvent.event.text, slackEvent.user.teamId);
+
+    if (cleanText.length === 0 && slackEvent.event.thread_ts) {
+      const parentMessage = await slackEvent.channel.fetchMessage(slackEvent.event.thread_ts);
+
+      const item = await Item.findOne({
+        where: { channelId: slackEvent.channel.id, ts: parentMessage.ts },
+      });
+      // tslint:disable-next-line: no-console
+      console.log(item, { channelId: slackEvent.channel.id, ts: parentMessage.ts });
+
+      return item;
+    } else {
+      const item = await Item.findOne({
+        where: { channelId: slackEvent.channel.id, ts: slackEvent.event.ts },
+      });
+
+      return item;
+    }
+  }
+
   public static async createFromEvent(slackEvent: Event) {
     const cleanText = await Item.cleanMessage(slackEvent.event.text, slackEvent.user.teamId);
 
@@ -38,7 +60,7 @@ export class Item extends BaseEntity {
         item = new Item();
         item.user = parentUser;
         item.channel = slackEvent.channel;
-        item.ts = slackEvent.event.ts;
+        item.ts = parentMessage.ts;
         item.message = await Item.cleanMessage(parentMessage.text, parentMessage.channel.teamId);
         item.createdBy = slackEvent.user;
         if (parentMessage.files) {
@@ -111,8 +133,11 @@ export class Item extends BaseEntity {
     const team = await Team.findOne(teamId);
 
     message = message.replace(/^(A|a)dd/, "");
+    message = message.replace(/^(D|d)one/, "");
     message = message.replace(`<@${team.botSlackId}> add`, "");
+    message = message.replace(`<@${team.botSlackId}> done`, "");
     message = message.replace(`<@${team.botSlackId}> Add`, "");
+    message = message.replace(`<@${team.botSlackId}> Done`, "");
     message = message.replace(`<@${team.botSlackId}>`, "");
     message = message.trim();
 

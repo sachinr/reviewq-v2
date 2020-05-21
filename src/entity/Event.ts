@@ -100,11 +100,11 @@ export class Event {
       }
       this.channel = channel;
 
-      let user = await User.findOne({ where: { slackId: this.event.user } });
+      let user = await User.findOne({ where: { slackId: this.event.user || this.event.bot_id } });
 
       if (!user) {
         user = new User();
-        user.slackId = this.event.user;
+        user.slackId = this.event.user || this.event.bot_id;
         user.team = this.eventTeam;
         await user.fetchProfile();
         await user.save();

@@ -167,11 +167,13 @@ export class User extends BaseEntity {
         }) as IBotsInfoCallResult;
 
         const resUser = result.bot;
-        this.firstName = resUser.name;
-        this.lastName = "(Bot)";
-        this.avatar24 = resUser.icons.image_36;
-        this.displayName = resUser.name;
-        this.realName = resUser.name;
+        if (resUser) {
+          this.firstName = resUser.name;
+          this.lastName = "(Bot)";
+          this.avatar24 = resUser.icons?.image_36;
+          this.displayName = resUser.name;
+          this.realName = resUser.name;
+        }
       }
     }
   }

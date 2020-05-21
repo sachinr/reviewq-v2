@@ -219,7 +219,15 @@ export class Item extends BaseEntity {
   public async notify(notificationType: "created" | "completed", url?: string) {
     switch (notificationType) {
       case "created":
-        await (this.channel).postInfo(`:tada: A <${this.archiveLink}|new message> was added to the channel queue by <@${this.createdBy.slackId}>`, url);
+        const team = await Team.findOne(this.user.teamId);
+        if (team.slackId === "T011ASSPZ1D") {
+          await (this.channel).postInfoEphemeral(this.user.slackId,
+          //   tslint:disable-next-line: max-line-length
+            `:tada: A <${this.archiveLink}|new message> was added to the channel queue by <@${this.createdBy.slackId}>`);
+        } else {
+          await (this.channel).postInfo(`:tada: A <${this.archiveLink}|new message> was added to the channel queue by <@${this.createdBy.slackId}>`, url);
+        }
+
         break;
       case "completed":
         if (this.complete) {

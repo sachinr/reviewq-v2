@@ -220,11 +220,7 @@ export class Item extends BaseEntity {
     switch (notificationType) {
       case "created":
         const team = await Team.findOne(this.user.teamId);
-        if (team.slackId === "T011ASSPZ1D") {
-          await (this.channel).postInfoEphemeral(this.user.slackId,
-          //   tslint:disable-next-line: max-line-length
-            `:tada: A <${this.archiveLink}|new message> was added to the channel queue by <@${this.createdBy.slackId}>`);
-        } else {
+        if (team.slackId !== "T01025CK145") {
           await (this.channel).postInfo(`:tada: A <${this.archiveLink}|new message> was added to the channel queue by <@${this.createdBy.slackId}>`, url);
         }
 

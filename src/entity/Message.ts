@@ -59,6 +59,7 @@ export class Message {
   public unfurl_links?: boolean;
   public unfurl_media?: boolean;
   public user: string;
+  public bot_id?: string;
   public username?: string;
   public response_type?: "in_channel" | "ephemeral";
 

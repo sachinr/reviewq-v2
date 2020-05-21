@@ -14,6 +14,17 @@ interface IConversationsListCallResult extends WebAPICallResult {
   channels: IConversationsListChannel[];
 }
 
+interface IBotsInfoCallResult extends WebAPICallResult {
+  bot: {
+    name: string;
+    icons: {
+      image_36: string;
+      image_48: string;
+      image_72: string;
+    }
+  };
+}
+
 interface IUsersInfoCallResult extends WebAPICallResult {
   user: {
     id: string;
@@ -149,8 +160,19 @@ export class User extends BaseEntity {
         this.realName = resUser.profile.real_name;
       }
     } catch (error) {
-      // tslint:disable-next-line: no-console
-      console.log(error);
+      if (this.team.botToken) {
+        const client = new WebClient(this.team.botToken);
+        const result = await client.bots.info({
+          bot: this.slackId,
+        }) as IBotsInfoCallResult;
+
+        const resUser = result.bot;
+        this.firstName = resUser.name;
+        this.lastName = "(Bot)";
+        this.avatar24 = resUser.icons.image_36;
+        this.displayName = resUser.name;
+        this.realName = resUser.name;
+      }
     }
   }
 

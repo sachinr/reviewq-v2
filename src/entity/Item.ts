@@ -45,7 +45,8 @@ export class Item extends BaseEntity {
 
     if (cleanText.length === 0 && slackEvent.event.thread_ts) {
       const parentMessage = await slackEvent.channel.fetchMessage(slackEvent.event.thread_ts);
-      const parentUser = await User.findOrCreateFromSlackId(parentMessage.user, slackEvent.eventTeam);
+      const parentUserId = parentMessage.user || parentMessage.bot_id;
+      const parentUser = await User.findOrCreateFromSlackId(parentUserId, slackEvent.eventTeam);
 
       let item = await Item.findOne({
         where: { channelId: slackEvent.channel.id, ts: parentMessage.ts },

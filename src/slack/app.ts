@@ -9,13 +9,15 @@
 // Slack-touching adapters are built per request from that client while the
 // Prisma-backed adapters are shared.
 
-import { App, LogLevel } from "@slack/bolt";
+import { App, Assistant, LogLevel } from "@slack/bolt";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "../config";
 import type { TokenCipher } from "../crypto/tokenCipher";
 import { createPrismaItemRepository } from "../db/itemRepository";
 import { createPrismaWorkspaceStore } from "../db/workspaceStore";
+import { createPrismaAssistantStore } from "../db/assistantStore";
 import { createItemService } from "../services/itemService";
+import { createAssistantService, createCannedResponder } from "../services/assistantService";
 import { createResolver } from "./resolver";
 import { SlackClient } from "./slackClient";
 import { createInstallationStore } from "./installationStore";
@@ -39,6 +41,10 @@ export interface AppDeps {
 export function createApp({ prisma, cipher, config }: AppDeps): App {
   const itemRepo = createPrismaItemRepository(prisma);
   const workspaceStore = createPrismaWorkspaceStore(prisma);
+  const assistantSvc = createAssistantService({
+    store: createPrismaAssistantStore(prisma),
+    responder: createCannedResponder(config.appName),
+  });
 
   const app = new App({
     signingSecret: config.slack.signingSecret,
@@ -252,6 +258,60 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       blocks: welcomeBlocks(),
     });
   });
+
+  // --- Assistant surface (Phase 1 skeleton) ------------------------------------
+  // Persists every turn so context survives across messages/restarts; replies via
+  // the injected Responder (canned now, Anthropic-backed in Phase 2).
+  const assistant = new Assistant({
+    threadStarted: async ({ event, say, saveThreadContext, setSuggestedPrompts }) => {
+      await say(
+        `Hi! I'm the ${config.appName} assistant. Ask me about your review queue, ` +
+          `or use the message action on any message to add it.`,
+      );
+      await saveThreadContext();
+      try {
+        await setSuggestedPrompts({
+          title: "Try asking",
+          prompts: [
+            { title: "What's in my queue?", message: "What's in my review queue?" },
+            { title: "How do I add an item?", message: "How do I add an item to my queue?" },
+          ],
+        });
+      } catch {
+        // setSuggestedPrompts is best-effort; a failure here must not drop the thread.
+      }
+    },
+    userMessage: async ({ message, client, context, say, setStatus }) => {
+      const m = message as {
+        text?: string;
+        user?: string;
+        channel?: string;
+        thread_ts?: string;
+        ts?: string;
+      };
+      const teamId = context.teamId;
+      if (!teamId || !m.user || !m.channel || !m.text) return;
+
+      const { resolver } = scopeFor(client);
+      const workspace = await resolver.resolveWorkspace(teamId);
+      if (!workspace) return;
+      const appUser = await resolver.resolveUser(workspace, m.user);
+
+      await setStatus("is thinking…");
+      const { reply } = await assistantSvc.handleUserMessage(
+        {
+          workspaceId: workspace.id,
+          appUserId: appUser.id,
+          slackChannelId: m.channel,
+          slackThreadTs: m.thread_ts ?? m.ts ?? "",
+        },
+        m.text,
+        new Date(),
+      );
+      await say(reply);
+    },
+  });
+  app.assistant(assistant);
 
   void helpBlocks; // referenced by the help modal in a later increment
 

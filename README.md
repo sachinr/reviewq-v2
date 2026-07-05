@@ -31,7 +31,7 @@ Slack ──▶ Bolt listeners (src/slack/app.ts)
 | Slack id → row resolution | `slack/resolver.ts` | `db/workspaceStore.ts`, `slack/slackClient.ts` |
 | Assistant thread memory | `services/assistantService.ts` | `db/assistantStore.ts` |
 | Assistant reply generation | `services/anthropicResponder.ts` | `slack/anthropicChat.ts` (Anthropic SDK) |
-| LLM streaming to Slack | `slack/streamBridge.ts`, `services/anthropicResponder.ts` (`replyStream`) | (live Slack stream sink: pending) |
+| LLM streaming to Slack | `slack/streamBridge.ts`, `services/anthropicResponder.ts` (`replyStream`), `services/assistantService.ts` (`handleUserMessageStreaming`) | `slack/slackStreamSink.ts` (chat.startStream/appendStream/stopStream) |
 | Token encryption at rest | `crypto/tokenCipher.ts` (AES-256-GCM) | — |
 | OAuth install | — | `slack/installationStore.ts` (Bolt) |
 
@@ -46,8 +46,9 @@ Slack ──▶ Bolt listeners (src/slack/app.ts)
 - **Assistant** — persists every turn (`AssistantThread`/`AssistantMessage`) so
   context survives across messages; replies via a swappable `Responder`
   (`createAnthropicResponder` when `ANTHROPIC_API_KEY` is set, else the canned
-  Phase 1 stand-in). The responder streams token deltas and exposes them as
-  `replyStream` for `streamBridge`.
+  Phase 1 stand-in). The responder streams token deltas via `replyStream`, which
+  `handleUserMessageStreaming` pumps through `streamBridge` into a live
+  `slackStreamSink` so replies render incrementally in the thread.
 
 ## Running locally
 
@@ -70,16 +71,18 @@ npx tsc --noEmit
 ```
 
 The pure core (`itemService`, `queueRenderer`, `streamBridge`, `resolver`,
-`assistantService`, `anthropicResponder`, `tokenCipher`) is fully covered by
-fakes in `test/` — the responder is tested against a fake `AnthropicChat`, so no
-key or network is needed. The Prisma/WebClient/Anthropic adapters are
+`assistantService`, `anthropicResponder`, `slackStreamSink`, `tokenCipher`) is
+fully covered by fakes in `test/` — the responder is tested against a fake
+`AnthropicChat`, and the live stream sink against a fake `chat.*Stream` client,
+so no key or network is needed. The Prisma/WebClient/Anthropic adapters are
 deliberately thin and exercised end-to-end when run against live services.
 
 ## Roadmap
 
 - **Phase 1** — core queue, all Slack surfaces, OAuth, assistant skeleton.
 - **Phase 2 (in progress)** — Anthropic-backed assistant reply generation
-  (`anthropicResponder` + `anthropicChat`, token-streaming via `replyStream`);
-  next: wire `replyStream` → `streamBridge` → a live Slack stream sink so replies
-  render incrementally, then summaries, duplicate detection, and digests (BullMQ
+  (`anthropicResponder` + `anthropicChat`, token-streaming via `replyStream`),
+  now wired end-to-end: `replyStream` → `streamBridge` → `slackStreamSink`
+  (chat.startStream/appendStream/stopStream) renders replies incrementally in the
+  assistant thread; next: summaries, duplicate detection, and digests (BullMQ
   worker: `npm run start:worker`).

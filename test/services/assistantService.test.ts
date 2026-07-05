@@ -1,5 +1,6 @@
 import type { AssistantMessage, AssistantThread } from "@prisma/client";
 import {
+  ASSISTANT_FALLBACK_REPLY,
   createAssistantService,
   createCannedResponder,
   type AssistantStore,
@@ -7,6 +8,8 @@ import {
   type Responder,
   type TurnView,
 } from "../../src/services/assistantService";
+import type { StreamingResponder } from "../../src/services/anthropicResponder";
+import type { StreamSink } from "../../src/slack/streamBridge";
 
 const NOW = new Date("2026-07-05T12:00:00.000Z");
 
@@ -97,6 +100,109 @@ describe("assistantService", () => {
     expect(store.threads.size).toBe(1);
     // Second call's history includes both prior turns plus the new user turn.
     expect(seen[1].map((t) => t.content)).toEqual(["first", "reply-1", "second"]);
+  });
+
+  it("streams a reply through the sink and persists the assembled text", async () => {
+    const store = new FakeAssistantStore();
+    const seen: TurnView[][] = [];
+    // A streaming responder: exposes replyStream (deltas) alongside reply().
+    const responder: StreamingResponder = {
+      async reply() {
+        return "unused";
+      },
+      async *replyStream(history) {
+        seen.push(history);
+        yield "Here ";
+        yield "you ";
+        yield "go.";
+      },
+    };
+    const svc = createAssistantService({ store, responder });
+
+    const appended: string[] = [];
+    let stopped = false;
+    const sink: StreamSink & { stop(): Promise<void> } = {
+      async append(text) {
+        appended.push(text);
+      },
+      async stop() {
+        stopped = true;
+      },
+    };
+
+    const { reply } = await svc.handleUserMessageStreaming(INPUT, "ping", NOW, sink, {
+      batchChars: 100,
+    });
+
+    // Streamed incrementally into the sink, and stop() finalized it.
+    expect(appended.join("")).toBe("Here you go.");
+    expect(stopped).toBe(true);
+    // The user turn was persisted before generation; the assembled reply after.
+    expect(store.messages.map((m) => [m.role, m.content])).toEqual([
+      ["user", "ping"],
+      ["assistant", "Here you go."],
+    ]);
+    expect(reply).toBe("Here you go.");
+    // The responder saw the full history (its persisted user turn included).
+    expect(seen[0].map((t) => t.content)).toEqual(["ping"]);
+  });
+
+  it("falls back to reply() for a non-streaming responder, still driving the sink once", async () => {
+    const store = new FakeAssistantStore();
+    const responder: Responder = { async reply() { return "canned answer"; } };
+    const svc = createAssistantService({ store, responder });
+
+    const appended: string[] = [];
+    let stopped = false;
+    const sink: StreamSink & { stop(): Promise<void> } = {
+      async append(text) {
+        appended.push(text);
+      },
+      async stop() {
+        stopped = true;
+      },
+    };
+
+    const { reply } = await svc.handleUserMessageStreaming(INPUT, "hi", NOW, sink);
+
+    expect(appended.join("")).toBe("canned answer");
+    expect(stopped).toBe(true);
+    expect(reply).toBe("canned answer");
+    expect(store.messages.map((m) => [m.role, m.content])).toEqual([
+      ["user", "hi"],
+      ["assistant", "canned answer"],
+    ]);
+  });
+
+  it("persists a safe fallback (and never appends) when streaming yields nothing", async () => {
+    const store = new FakeAssistantStore();
+    const responder: StreamingResponder = {
+      async reply() {
+        return "";
+      },
+      // eslint-disable-next-line require-yield
+      async *replyStream() {
+        return; // model produced no text
+      },
+    };
+    const svc = createAssistantService({ store, responder });
+
+    const appended: string[] = [];
+    const sink: StreamSink & { stop(): Promise<void> } = {
+      async append(text) {
+        appended.push(text);
+      },
+      async stop() {},
+    };
+
+    const { reply } = await svc.handleUserMessageStreaming(INPUT, "hi", NOW, sink);
+
+    expect(appended).toHaveLength(0); // nothing to render
+    expect(reply).toBe(ASSISTANT_FALLBACK_REPLY);
+    expect(store.messages.map((m) => [m.role, m.content])).toEqual([
+      ["user", "hi"],
+      ["assistant", ASSISTANT_FALLBACK_REPLY],
+    ]);
   });
 
   it("startThread records the context channel", async () => {

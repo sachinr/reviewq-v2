@@ -18,7 +18,7 @@
 
 ## Implementation status
 
-All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to `origin`). Git history is the source of truth; this section is the human-readable summary. **44 tests passing, `tsc --noEmit` clean.**
+All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to `origin`). Git history is the source of truth; this section is the human-readable summary. **53 tests passing, `tsc --noEmit` clean.**
 
 **Environment note:** the build sandbox has **no Docker / Postgres / Redis / live Slack**. So DB/queue/OAuth integration tests run in **CI**, not locally; pure business logic is fully tested in-sandbox against fakes. Dependency versions resolved & verified: Bolt 4.7.3, Prisma 5.22, Anthropic SDK 0.32.1, BullMQ 5.79.
 
@@ -31,7 +31,7 @@ All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to
 **Phase 2 — started.**
 - `services/anthropicResponder.ts` (+ tests, vs a fake `AnthropicChat`): Anthropic-backed `StreamingResponder` implementing the same `Responder` port; exposes `replyStream()` (text-delta `AsyncIterable`) plus a `reply()` that assembles the full string. `slack/anthropicChat.ts` is the SDK adapter (model via `ANTHROPIC_MODEL`, default `claude-sonnet-5`). Selected when `ANTHROPIC_API_KEY` is set, else the canned Phase 1 responder.
 
-**Immediate next — LIVE STREAMING (in progress):** the assistant's `userMessage` handler (`slack/app.ts:294-321`) currently posts the whole reply at once via `say(reply)`. Replace that final step with a **real Slack stream sink** wrapping `chat.startStream` / `chat.appendStream` / `chat.stopStream`, fed by `anthropicResponder.replyStream()` → `streamBridge.pumpStream()`, so replies render incrementally and rate-safely. Still persist the final assembled reply (`assistantService.addMessage`). `streamBridge` (batching + 429 backoff) and `replyStream` already exist and are tested — only the live sink + the handler swap remain. TDD: unit-test the sink's start/append/stop sequencing against a fake WebClient; the sink is the one genuinely new piece.
+**LIVE STREAMING — done.** The assistant's `userMessage` handler no longer posts the whole reply at once. A new adapter `slack/slackStreamSink.ts` wraps `chat.startStream` / `chat.appendStream` / `chat.stopStream` behind `streamBridge`'s `StreamSink` port (lazy start on first append, idempotent stop, Slack rate-limit errors translated into `streamBridge`'s `RateLimited` shape so the existing 429 backoff drives retries). `assistantService.handleUserMessageStreaming` persists the user turn, pumps `anthropicResponder.replyStream()` → `streamBridge.pumpStream()` → the sink while assembling the text, then persists the assembled reply (canonical DB record unchanged); it duck-type-falls-back to `reply()` for the canned responder and to a plain `say()` when the model streams nothing. The handler (`slack/app.ts`) builds the sink from the per-request WebClient and stops it in a `finally`. Tested with a fake `chat.*Stream` client (start/append/stop sequencing, no-op empty stop, rate-limit translation, pumpStream cooperation) and a fake store + streaming responder (streamed persistence, non-streaming fallback, empty fallback).
 
 **Remaining after that (Phase 1 tail + infra):**
 - BullMQ `notification-jobs` queue + `notificationWorker` (retry-safe outbound Slack calls) — integration test **gated on `REDIS_URL`** (CI-only).

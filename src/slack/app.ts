@@ -22,6 +22,7 @@ import { createAnthropicResponder } from "../services/anthropicResponder";
 import { createAnthropicChat } from "./anthropicChat";
 import { createResolver } from "./resolver";
 import { SlackClient } from "./slackClient";
+import { createSlackStreamSink, type StreamingChatClient } from "./slackStreamSink";
 import { createInstallationStore } from "./installationStore";
 import { renderQueue, ACTION_COMPLETE_ITEM, ACTION_UNDO_ITEM, ACTION_QUEUE_PAGE } from "./queueRenderer";
 import {
@@ -308,17 +309,34 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       const appUser = await resolver.resolveUser(workspace, m.user);
 
       await setStatus("is thinking…");
-      const { reply } = await assistantSvc.handleUserMessage(
-        {
-          workspaceId: workspace.id,
-          appUserId: appUser.id,
-          slackChannelId: m.channel,
-          slackThreadTs: m.thread_ts ?? m.ts ?? "",
-        },
-        m.text,
-        new Date(),
-      );
-      await say(reply);
+
+      // Stream the reply into the thread live via chat.startStream/appendStream/
+      // stopStream, so tokens render incrementally and rate-safely instead of
+      // landing as one delayed block. The assembled reply is still persisted.
+      const threadTs = m.thread_ts ?? m.ts ?? "";
+      const sink = createSlackStreamSink(client as StreamingChatClient, {
+        channel: m.channel,
+        threadTs,
+      });
+      try {
+        const { reply } = await assistantSvc.handleUserMessageStreaming(
+          {
+            workspaceId: workspace.id,
+            appUserId: appUser.id,
+            slackChannelId: m.channel,
+            slackThreadTs: threadTs,
+          },
+          m.text,
+          new Date(),
+          sink,
+        );
+        // If the model produced nothing, the stream never opened — fall back to a
+        // plain post so the user still sees a reply.
+        if (!sink.started) await say(reply);
+      } finally {
+        // Idempotent: closes a half-open stream if generation threw mid-flight.
+        await sink.stop();
+      }
     },
   });
   app.assistant(assistant);

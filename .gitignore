@@ -13,3 +13,10 @@ temp
 .vscode/
 
 ormconfig.json
+
+# Prisma
+prisma/.env
+*.db
+
+# Jest
+coverage/

@@ -1,0 +1,160 @@
+// Reviewed v2 — Phase 1 schema.
+// Core queue tables (Workspace/AppUser/Channel/Item) plus the minimal state
+// the Assistant-thread skeleton needs to remember a conversation across turns.
+// AI-feature tables (ItemSummary, ItemClarificationRequest, AssigneeSuggestion,
+// DuplicateCandidate, ItemEmbedding, DigestRun) land in Phase 2/3, not here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Workspace {
+  id               String   @id @default(cuid())
+  slackTeamId      String   @unique
+  slackEnterpriseId String?
+  name             String?
+  botUserId        String
+  botTokenEncrypted String
+  botScopes        String
+  isActive         Boolean  @default(true)
+  installedAt      DateTime @default(now())
+  uninstalledAt    DateTime?
+
+  users    AppUser[]
+  channels Channel[]
+
+  @@map("workspaces")
+}
+
+model AppUser {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  slackUserId       String
+  displayName       String?
+  avatarUrl         String?
+  userTokenEncrypted String?
+  isInstaller       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  flaggedItems         Item[] @relation("FlaggedByUser")
+  authoredItems        Item[] @relation("AuthorUser")
+  completedItems       Item[] @relation("CompletedByUser")
+  assistantThreads     AssistantThread[]
+
+  @@unique([workspaceId, slackUserId])
+  @@map("app_users")
+}
+
+model Channel {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  slackChannelId String
+  name           String?
+  type           ChannelType
+  isBotMember    Boolean  @default(false)
+  isPrivate      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  items     Item[]
+
+  @@unique([workspaceId, slackChannelId])
+  @@map("channels")
+}
+
+enum ChannelType {
+  channel
+  group
+  im
+  mpim
+}
+
+model Item {
+  id                 String     @id @default(cuid())
+  workspaceId        String
+  channelId          String
+  slackMessageTs     String
+  slackThreadTs      String?
+  messageText        String?
+  permalink          String?
+  filesJson          String?
+  sourceMetadataKey  String?
+
+  // The original message author. Nullable FK + always-present raw Slack id so
+  // that items flagged from *bot/app* messages (e.g. a GitHub app's PR post,
+  // which the classic product explicitly supported) don't require minting a
+  // synthetic AppUser row. authorUserId is populated only for human authors.
+  authorSlackId      String
+  authorUserId       String?
+  flaggedByUserId    String
+  completedByUserId  String?
+
+  status             ItemStatus @default(open)
+  completedAt        DateTime?
+
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  channel      Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author       AppUser? @relation("AuthorUser", fields: [authorUserId], references: [id])
+  flaggedBy    AppUser  @relation("FlaggedByUser", fields: [flaggedByUserId], references: [id])
+  completedBy  AppUser? @relation("CompletedByUser", fields: [completedByUserId], references: [id])
+
+  @@unique([channelId, slackMessageTs])
+  @@index([channelId, status])
+  @@index([workspaceId, status])
+  @@index([completedAt])
+  @@map("items")
+}
+
+enum ItemStatus {
+  open
+  complete
+}
+
+// --- Assistant-thread skeleton state (Phase 1) ---
+// A conversational agent needs to remember what "that one" refers to across
+// turns; without this table a restart or a second message in the same
+// Slack assistant thread loses all context.
+
+model AssistantThread {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  appUserId        String
+  slackChannelId   String
+  slackThreadTs    String
+  contextChannelId String?
+  createdAt        DateTime @default(now())
+  lastActiveAt     DateTime @default(now())
+
+  appUser  AppUser           @relation(fields: [appUserId], references: [id], onDelete: Cascade)
+  messages AssistantMessage[]
+
+  @@unique([workspaceId, slackChannelId, slackThreadTs])
+  @@map("assistant_threads")
+}
+
+model AssistantMessage {
+  id                String   @id @default(cuid())
+  assistantThreadId String
+  role              AssistantMessageRole
+  content           String
+  createdAt         DateTime @default(now())
+
+  assistantThread AssistantThread @relation(fields: [assistantThreadId], references: [id], onDelete: Cascade)
+
+  @@index([assistantThreadId, createdAt])
+  @@map("assistant_messages")
+}
+
+enum AssistantMessageRole {
+  user
+  assistant
+}

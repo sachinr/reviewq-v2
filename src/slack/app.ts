@@ -18,6 +18,8 @@ import { createPrismaWorkspaceStore } from "../db/workspaceStore";
 import { createPrismaAssistantStore } from "../db/assistantStore";
 import { createItemService } from "../services/itemService";
 import { createAssistantService, createCannedResponder } from "../services/assistantService";
+import { createAnthropicResponder } from "../services/anthropicResponder";
+import { createAnthropicChat } from "./anthropicChat";
 import { createResolver } from "./resolver";
 import { SlackClient } from "./slackClient";
 import { createInstallationStore } from "./installationStore";
@@ -41,9 +43,17 @@ export interface AppDeps {
 export function createApp({ prisma, cipher, config }: AppDeps): App {
   const itemRepo = createPrismaItemRepository(prisma);
   const workspaceStore = createPrismaWorkspaceStore(prisma);
+  // Phase 2: use the Anthropic-backed responder when a key is configured, else
+  // fall back to the canned Phase 1 stand-in so the app still boots without one.
+  const responder = config.anthropicApiKey
+    ? createAnthropicResponder({
+        chat: createAnthropicChat(config.anthropicApiKey),
+        appName: config.appName,
+      })
+    : createCannedResponder(config.appName);
   const assistantSvc = createAssistantService({
     store: createPrismaAssistantStore(prisma),
-    responder: createCannedResponder(config.appName),
+    responder,
   });
 
   const app = new App({

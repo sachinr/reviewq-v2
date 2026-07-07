@@ -48,6 +48,8 @@ export interface WorkspaceStore {
   findWorkspaceByTeamId(slackTeamId: string): Promise<Workspace | null>;
   upsertChannel(input: UpsertChannelInput): Promise<Channel>;
   upsertUser(input: UpsertUserInput): Promise<AppUser>;
+  /** All known channels for a workspace — the App Home overview's candidate set. */
+  listChannels(workspaceId: string): Promise<Channel[]>;
 }
 
 export interface ResolverDeps {

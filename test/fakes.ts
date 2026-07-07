@@ -118,6 +118,17 @@ export class FakeItemRepository implements ItemRepository {
       )
       .sort((a, b) => a.id.localeCompare(b.id));
   }
+
+  async countOpenByChannelIds(channelIds: string[]): Promise<Array<{ channelId: string; count: number }>> {
+    const wanted = new Set(channelIds);
+    const counts = new Map<string, number>();
+    for (const it of this.items.values()) {
+      if (it.status === "open" && wanted.has(it.channelId)) {
+        counts.set(it.channelId, (counts.get(it.channelId) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()].map(([channelId, count]) => ({ channelId, count }));
+  }
 }
 
 export interface RecordedCall {

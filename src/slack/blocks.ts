@@ -4,8 +4,6 @@
 // app's Message/View entities so the product reads the same.
 
 import type { KnownBlock } from "@slack/types";
-import type { Item } from "@prisma/client";
-import { renderQueue } from "./queueRenderer";
 
 export const ACTION_HELP = "help";
 export const ACTION_VIEW_ALL = "view_all_modal";
@@ -67,21 +65,86 @@ export function helpBlocks(appName: string): KnownBlock[] {
   ];
 }
 
+/** One row of the App Home channel list: a channel the viewer belongs to. */
+export interface HomeChannelSummary {
+  slackChannelId: string;
+  name: string | null;
+  openCount: number;
+}
+
 /**
- * App Home: a header, then the rendered queue for the user's DM view. The
- * classic app published a per-user home; here we render whatever items list the
- * caller resolved (typically the user's DM/self channel queue).
+ * App Home state. The classic home used the *viewing* user's token to list the
+ * channels they're in and showed each one's open count — so we can only populate
+ * it once that user has granted a user token. Without one we render a prompt
+ * instead of silently showing an empty (or, worse, cross-member) list.
  */
-export function homeView(appName: string, items: Item[]): {
+export type HomeState =
+  | { kind: "channels"; channels: HomeChannelSummary[] }
+  | { kind: "authNeeded" };
+
+/**
+ * App Home view: a header plus either the per-channel open-count list (only the
+ * channels the viewer is a member of) or an auth prompt. Pure — the handler does
+ * the token/Slack I/O and hands the resolved state here.
+ */
+export function homeView(appName: string, state: HomeState): {
   type: "home";
   blocks: KnownBlock[];
 } {
-  const { blocks } = renderQueue({ items });
+  const header: KnownBlock = {
+    type: "header",
+    text: { type: "plain_text", text: appName },
+  };
+
+  if (state.kind === "authNeeded") {
+    return {
+      type: "home",
+      blocks: [
+        header,
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text:
+              "Connect your account to see your channels' review queues here.\n\n" +
+              "In the meantime you can always run the slash command in a channel, " +
+              "or use the *Add to review queue* message action on any message.",
+          },
+        },
+        {
+          type: "actions",
+          elements: [
+            { type: "button", text: { type: "plain_text", text: "Help" }, action_id: ACTION_HELP },
+          ],
+        },
+      ],
+    };
+  }
+
+  const withOpen = state.channels.filter((c) => c.openCount > 0);
+  const body: KnownBlock[] =
+    withOpen.length === 0
+      ? [
+          {
+            type: "section",
+            text: { type: "mrkdwn", text: ":sparkles: Your channels have no open review items. All clear!" },
+          },
+        ]
+      : withOpen.map((c) => ({
+          type: "section" as const,
+          text: {
+            type: "mrkdwn" as const,
+            text: `*<#${c.slackChannelId}>* — ${c.openCount} open item${c.openCount === 1 ? "" : "s"}`,
+          },
+        }));
+
   return {
     type: "home",
     blocks: [
-      { type: "header", text: { type: "plain_text", text: appName } },
-      ...blocks,
+      header,
+      { type: "section", text: { type: "mrkdwn", text: "Here's where your review items stand:" } },
+      { type: "divider" },
+      ...body,
     ],
   };
 }

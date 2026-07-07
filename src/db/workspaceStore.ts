@@ -64,5 +64,12 @@ export function createPrismaWorkspaceStore(prisma: PrismaClient): WorkspaceStore
         update: profile,
       });
     },
+
+    listChannels(workspaceId: string): Promise<Channel[]> {
+      return prisma.channel.findMany({
+        where: { workspaceId },
+        orderBy: { name: "asc" },
+      });
+    },
   };
 }

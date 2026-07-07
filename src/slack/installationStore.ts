@@ -84,6 +84,22 @@ export function createInstallationStore(
       if (!workspace || !workspace.isActive) {
         throw new Error(`fetchInstallation: no active install for team ${query.teamId}`);
       }
+
+      // Return the requested user's stored token (decrypted) rather than the old
+      // hardcoded empty user — the encrypted user token was dead data before, and
+      // the App Home reads it to scope the view to that user's channels.
+      let user: { id: string; token?: string } = { id: query.userId ?? "" };
+      if (query.userId) {
+        const appUser = await prisma.appUser.findUnique({
+          where: {
+            workspaceId_slackUserId: { workspaceId: workspace.id, slackUserId: query.userId },
+          },
+        });
+        if (appUser?.userTokenEncrypted) {
+          user = { id: query.userId, token: cipher.decrypt(appUser.userTokenEncrypted) };
+        }
+      }
+
       return {
         team: { id: workspace.slackTeamId, name: workspace.name ?? undefined },
         enterprise: workspace.slackEnterpriseId
@@ -95,7 +111,7 @@ export function createInstallationStore(
           scopes: workspace.botScopes ? workspace.botScopes.split(",") : [],
           id: workspace.botUserId,
         },
-        user: { id: "", token: undefined, scopes: undefined },
+        user,
       } as Installation;
     },
 

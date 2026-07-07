@@ -232,6 +232,29 @@ describe("itemService.undoComplete", () => {
   });
 });
 
+describe("itemService.openCountsByChannels", () => {
+  it("counts open items per channel and omits channels with none", async () => {
+    const { repo, service } = build();
+    repo.seed(
+      makeItem({ id: "a1", channelId: "chan_1", status: "open" }),
+      makeItem({ id: "a2", channelId: "chan_1", status: "open" }),
+      makeItem({ id: "b1", channelId: "chan_2", status: "open" }),
+      makeItem({ id: "b2", channelId: "chan_2", status: "complete", completedAt: NOW }),
+      makeItem({ id: "c1", channelId: "chan_3", status: "complete", completedAt: NOW }),
+    );
+
+    const counts = await service.openCountsByChannels(["chan_1", "chan_2", "chan_3"]);
+    const byId = Object.fromEntries(counts.map((c) => [c.channelId, c.count]));
+
+    expect(byId).toEqual({ chan_1: 2, chan_2: 1 }); // chan_3 has no open items → absent
+  });
+
+  it("returns empty for an empty channel set", async () => {
+    const { service } = build();
+    expect(await service.openCountsByChannels([])).toEqual([]);
+  });
+});
+
 describe("itemService.openAndRecentlyClosedItems", () => {
   it("returns open items plus items closed within the undo window, sorted by creation", async () => {
     const { repo, service } = build();

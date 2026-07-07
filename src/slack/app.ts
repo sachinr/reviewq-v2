@@ -10,6 +10,7 @@
 // Prisma-backed adapters are shared.
 
 import { App, Assistant, LogLevel } from "@slack/bolt";
+import { WebClient } from "@slack/web-api";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "../config";
 import type { TokenCipher } from "../crypto/tokenCipher";
@@ -68,7 +69,9 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     stateSecret: config.slack.stateSecret,
     scopes: config.slack.scopes,
     installationStore,
-    installerOptions: { directInstall: true },
+    // Request user scopes at install so the installer grants a user token — the
+    // App Home uses it to list the channels that user belongs to.
+    installerOptions: { directInstall: true, userScopes: config.slack.userScopes },
     logLevel: config.nodeEnv === "development" ? LogLevel.DEBUG : LogLevel.INFO,
   });
 
@@ -422,12 +425,16 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
   });
 
   // --- App Home ----------------------------------------------------------------
+  // Shows each channel the *viewing* user belongs to with its open-item count.
+  // Membership is read from the user's own token (conversations.list), so the
+  // home never leaks a private channel's queue to someone not in it — the plan's
+  // authorization boundary. Without a stored user token we can't know membership,
+  // so we render an auth prompt instead of a bogus/empty list (the old handler
+  // mistakenly treated the user's U… id as a channel id and always came up empty).
   app.event("app_home_opened", async ({ event, client }) => {
     if (event.tab !== "home") return;
     const { resolver, items } = scopeFor(client);
     const teamId = (event as { view?: { team_id?: string } }).view?.team_id;
-    // app_home_opened carries the user; resolve the workspace from the authed
-    // client's team via auth.test when the payload doesn't include a team id.
     let workspace = teamId ? await resolver.resolveWorkspace(teamId) : null;
     if (!workspace) {
       const auth = await (client as { auth: { test: () => Promise<{ team_id?: string }> } }).auth.test();
@@ -435,13 +442,30 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     }
     if (!workspace) return;
 
-    // The home tab shows the user's DM queue (their own self-channel).
-    const channel = await resolver.resolveChannel(workspace, event.user);
-    const { all } = await items.openAndRecentlyClosedItems(channel, new Date());
-    await (client as { views: { publish: (a: unknown) => Promise<unknown> } }).views.publish({
-      user_id: event.user,
-      view: homeView(config.appName, all),
-    });
+    const publish = (view: unknown) =>
+      (client as { views: { publish: (a: unknown) => Promise<unknown> } }).views.publish({
+        user_id: event.user,
+        view,
+      });
+
+    const viewer = await resolver.resolveUser(workspace, event.user);
+    if (!viewer.userTokenEncrypted) {
+      await publish(homeView(config.appName, { kind: "authNeeded" }));
+      return;
+    }
+
+    const memberIds = await listUserMemberChannelIds(cipher.decrypt(viewer.userTokenEncrypted));
+    const channels = (await workspaceStore.listChannels(workspace.id)).filter((c) =>
+      memberIds.has(c.slackChannelId),
+    );
+    const counts = await items.openCountsByChannels(channels.map((c) => c.id));
+    const countById = new Map(counts.map((x) => [x.channelId, x.count]));
+    const summaries = channels.map((c) => ({
+      slackChannelId: c.slackChannelId,
+      name: c.name,
+      openCount: countById.get(c.id) ?? 0,
+    }));
+    await publish(homeView(config.appName, { kind: "channels", channels: summaries }));
   });
 
   // --- Bot added to a channel: welcome message ---------------------------------
@@ -559,6 +583,30 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
   app.assistant(assistant);
 
   return app;
+}
+
+/**
+ * The set of channel ids the token's owner is a member of, across every
+ * conversation type, following pagination. Used to scope the App Home to only
+ * the channels the viewing user can actually see.
+ */
+async function listUserMemberChannelIds(userToken: string): Promise<Set<string>> {
+  const web = new WebClient(userToken);
+  const ids = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const res = await web.conversations.list({
+      types: "public_channel,private_channel,mpim,im",
+      exclude_archived: true,
+      limit: 200,
+      ...(cursor ? { cursor } : {}),
+    });
+    for (const c of (res.channels ?? []) as Array<{ id?: string }>) {
+      if (c.id) ids.add(c.id);
+    }
+    cursor = res.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+  return ids;
 }
 
 /** Parse a pagination button's JSON value, defaulting to page 1 on anything odd. */

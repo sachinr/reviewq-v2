@@ -62,5 +62,15 @@ export function createPrismaItemRepository(prisma: PrismaClient): ItemRepository
         orderBy: { createdAt: "asc" },
       });
     },
+
+    async countOpenByChannelIds(channelIds: string[]): Promise<Array<{ channelId: string; count: number }>> {
+      if (channelIds.length === 0) return [];
+      const groups = await prisma.item.groupBy({
+        by: ["channelId"],
+        where: { channelId: { in: channelIds }, status: "open" },
+        _count: { _all: true },
+      });
+      return groups.map((g) => ({ channelId: g.channelId, count: g._count._all }));
+    },
   };
 }

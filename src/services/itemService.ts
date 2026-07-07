@@ -160,6 +160,16 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
     return repo.findOpenByChannel(channel.id);
   }
 
+  /**
+   * Open-item counts for a set of channels, for the App Home overview. Channels
+   * with no open items are simply absent from the result (callers default to 0).
+   */
+  async function openCountsByChannels(
+    channelIds: string[],
+  ): Promise<Array<{ channelId: string; count: number }>> {
+    return repo.countOpenByChannelIds(channelIds);
+  }
+
   async function openAndRecentlyClosedItems(channel: ChannelContext, now: Date): Promise<QueueView> {
     const open = await repo.findOpenByChannel(channel.id);
     const since = new Date(now.getTime() - UNDO_WINDOW_MS);
@@ -175,6 +185,7 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
     undoComplete,
     listOpenItems,
     openAndRecentlyClosedItems,
+    openCountsByChannels,
   };
 }
 

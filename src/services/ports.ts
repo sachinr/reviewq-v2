@@ -42,6 +42,8 @@ export interface ItemRepository {
   markOpen(id: string): Promise<Item>;
   findOpenByChannel(channelId: string): Promise<Item[]>;
   findRecentlyClosedByChannel(channelId: string, since: Date): Promise<Item[]>;
+  /** Count open items grouped by channel, for the App Home overview. */
+  countOpenByChannelIds(channelIds: string[]): Promise<Array<{ channelId: string; count: number }>>;
 }
 
 /** A single fetched Slack message, normalized for the add-the-parent flow. */

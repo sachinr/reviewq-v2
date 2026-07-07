@@ -119,6 +119,25 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
     return { item, notifiedAuthor };
   }
 
+  /**
+   * Complete the open item attached to a given source message ts, if one exists.
+   * This is the entry point for the classic `@bot done` (as a thread reply): the
+   * listener resolves the target message ts, we look the item up channel-scoped
+   * and complete it — reusing completeItem so the ✅ reaction + author DM fire
+   * identically. Returns null when there is no open item for that message (a
+   * `done` on something that was never queued, or already completed).
+   */
+  async function completeItemByMessageTs(
+    channel: ChannelContext,
+    messageTs: string,
+    completer: { userId: string; slackId: string },
+    now: Date,
+  ): Promise<CompleteItemResult | null> {
+    const existing = await repo.findByChannelAndTs(channel.id, messageTs);
+    if (!existing || existing.status !== "open") return null;
+    return completeItem(existing.id, channel, completer, now);
+  }
+
   async function undoComplete(itemId: string, channel: ChannelContext, now: Date): Promise<UndoResult> {
     const existing = await repo.findById(itemId);
     if (!existing) throw new Error(`undoComplete: item ${itemId} not found`);
@@ -149,7 +168,14 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
     return { open, recentlyClosed, all };
   }
 
-  return { createItem, completeItem, undoComplete, listOpenItems, openAndRecentlyClosedItems };
+  return {
+    createItem,
+    completeItem,
+    completeItemByMessageTs,
+    undoComplete,
+    listOpenItems,
+    openAndRecentlyClosedItems,
+  };
 }
 
 export type ItemService = ReturnType<typeof createItemService>;

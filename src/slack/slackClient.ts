@@ -7,7 +7,7 @@
 
 import type { WebClient } from "@slack/web-api";
 import type { ChannelType } from "@prisma/client";
-import type { SlackGateway } from "../services/ports";
+import type { FetchedMessage, SlackGateway } from "../services/ports";
 import type {
   ConversationInfo,
   SlackInfoGateway,
@@ -54,6 +54,32 @@ export class SlackClient implements SlackGateway, SlackInfoGateway {
     }
   }
 
+  async getMessage(channelSlackId: string, messageTs: string): Promise<FetchedMessage | null> {
+    try {
+      // conversations.history anchored at the ts (inclusive, limit 1) returns
+      // exactly that message — works for a thread parent, which is a normal
+      // channel message.
+      const res = await this.web.conversations.history({
+        channel: channelSlackId,
+        latest: messageTs,
+        inclusive: true,
+        limit: 1,
+      });
+      const m = (res.messages as HistoryMessage[] | undefined)?.[0];
+      if (!m || m.ts !== messageTs) return null;
+      return {
+        ts: m.ts,
+        text: m.text ?? null,
+        user: m.user ?? null,
+        botId: m.bot_id ?? null,
+        threadTs: m.thread_ts ?? null,
+        filesJson: m.files ? JSON.stringify(m.files) : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async getConversationInfo(slackChannelId: string): Promise<ConversationInfo | null> {
     try {
       const res = await this.web.conversations.info({ channel: slackChannelId });
@@ -87,6 +113,15 @@ export class SlackClient implements SlackGateway, SlackInfoGateway {
       throw err;
     }
   }
+}
+
+interface HistoryMessage {
+  ts: string;
+  text?: string;
+  user?: string;
+  bot_id?: string;
+  thread_ts?: string;
+  files?: unknown[];
 }
 
 interface ConversationsInfoChannel {

@@ -6,6 +6,7 @@
 import type { Item, ItemStatus } from "@prisma/client";
 import type {
   CreateItemData,
+  FetchedMessage,
   ItemRepository,
   SlackGateway,
 } from "../src/services/ports";
@@ -127,6 +128,8 @@ export interface RecordedCall {
 export class FakeSlackGateway implements SlackGateway {
   public calls: RecordedCall[] = [];
   public permalinkToReturn: string | null = "https://slack.example/archives/C1/p1700000000000100";
+  /** Messages the fake can "fetch" by ts, keyed by ts. */
+  public messagesByTs = new Map<string, FetchedMessage>();
 
   private record(method: string, ...args: unknown[]): void {
     this.calls.push({ method, args });
@@ -147,5 +150,9 @@ export class FakeSlackGateway implements SlackGateway {
   }
   async removeReaction(channelSlackId: string, messageTs: string, name: string): Promise<void> {
     this.record("removeReaction", channelSlackId, messageTs, name);
+  }
+  async getMessage(channelSlackId: string, messageTs: string): Promise<FetchedMessage | null> {
+    this.record("getMessage", channelSlackId, messageTs);
+    return this.messagesByTs.get(messageTs) ?? null;
   }
 }

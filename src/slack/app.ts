@@ -25,6 +25,8 @@ import { SlackClient } from "./slackClient";
 import { createSlackStreamSink, type StreamingChatClient } from "./slackStreamSink";
 import { createInstallationStore } from "./installationStore";
 import { renderQueue, ACTION_COMPLETE_ITEM, ACTION_UNDO_ITEM, ACTION_QUEUE_PAGE } from "./queueRenderer";
+import { parseBotCommand } from "./messageCommands";
+import type { SourceMessage } from "../services/ports";
 import {
   ACTION_HELP,
   helpBlocks,
@@ -160,6 +162,190 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     });
   });
 
+  // --- Classic text entry points: @bot add/done/list/help and DM add/list ------
+  // The third add path (alongside the message action and slash command). A pure
+  // parser (messageCommands.ts) decides the command; this handler does the I/O:
+  // resolve rows, optionally fetch the parent message (a `@bot add` thread reply
+  // adds the parent), mutate via itemService, and confirm.
+  interface TextCtx {
+    text: string;
+    userSlackId: string;
+    channelId: string;
+    ts: string;
+    threadTs?: string;
+    isDM: boolean;
+  }
+
+  async function handleTextCommand(client: unknown, teamId: string | undefined, ctx: TextCtx): Promise<void> {
+    if (!teamId || !ctx.text || !ctx.userSlackId) return;
+    const { resolver, items, slack } = scopeFor(client);
+    const workspace = await resolver.resolveWorkspace(teamId);
+    if (!workspace) return;
+    // Never react to our own messages (guards against loops).
+    if (ctx.userSlackId === workspace.botUserId) return;
+
+    const cmd = parseBotCommand(ctx.text, workspace.botUserId, ctx.isDM);
+    if (cmd.kind === "ignore") return;
+
+    const channel = await resolver.resolveChannel(workspace, ctx.channelId);
+    const now = new Date();
+
+    if (cmd.kind === "help") {
+      await reply(client, ctx, { text: "Here's how I work", blocks: helpBlocks(config.appName) });
+      return;
+    }
+
+    if (cmd.kind === "list") {
+      const { all } = await items.openAndRecentlyClosedItems(channel, now);
+      const { blocks } = renderQueue({ items: all });
+      await reply(client, ctx, { text: "Your review queue", blocks });
+      return;
+    }
+
+    if (cmd.kind === "add") {
+      const flagger = await resolver.resolveUser(workspace, ctx.userSlackId);
+      // Empty body + a thread reply means "add the message I'm replying to";
+      // otherwise the command message itself becomes the item.
+      let source: SourceMessage | null;
+      if (cmd.body.length === 0 && ctx.threadTs && ctx.threadTs !== ctx.ts) {
+        source = await sourceFromParent(slack, resolver, workspace, channel.slackChannelId, ctx.threadTs);
+      } else {
+        source = {
+          slackMessageTs: ctx.ts,
+          slackThreadTs: ctx.threadTs ?? null,
+          messageText: cmd.body.length > 0 ? cmd.body : null,
+          authorSlackId: ctx.userSlackId,
+          authorUserId: flagger.id,
+          filesJson: null,
+        };
+      }
+      if (!source) {
+        await reply(client, ctx, { text: "Sorry — I couldn't find that message to add." });
+        return;
+      }
+      const result = await items.createItem(channel, source, flagger.id);
+      await reply(client, ctx, {
+        text: result.wasDuplicate
+          ? "That message is already in your review queue."
+          : result.wasReopened
+            ? ":recycle: Re-added a completed item to your queue."
+            : ":inbox_tray: Added to your review queue.",
+      });
+      return;
+    }
+
+    // cmd.kind === "done": complete the parent (thread reply) or this message.
+    const targetTs = ctx.threadTs && ctx.threadTs !== ctx.ts ? ctx.threadTs : ctx.ts;
+    const actor = await resolver.resolveUser(workspace, ctx.userSlackId);
+    const done = await items.completeItemByMessageTs(
+      channel,
+      targetTs,
+      { userId: actor.id, slackId: ctx.userSlackId },
+      now,
+    );
+    await reply(client, ctx, {
+      text: done
+        ? ":white_check_mark: Marked as done."
+        : "I couldn't find an open item for that message.",
+    });
+  }
+
+  // Resolve a parent message into an add-ready SourceMessage (bot authors keep a
+  // raw id with a null FK, mirroring the message-action path).
+  async function sourceFromParent(
+    slack: ReturnType<typeof scopeFor>["slack"],
+    resolver: ReturnType<typeof scopeFor>["resolver"],
+    workspace: NonNullable<Awaited<ReturnType<ReturnType<typeof scopeFor>["resolver"]["resolveWorkspace"]>>>,
+    slackChannelId: string,
+    parentTs: string,
+  ): Promise<SourceMessage | null> {
+    const parent = await slack.getMessage(slackChannelId, parentTs);
+    if (!parent) return null;
+    let authorUserId: string | null = null;
+    if (parent.user) authorUserId = (await resolver.resolveUser(workspace, parent.user)).id;
+    return {
+      slackMessageTs: parent.ts,
+      slackThreadTs: parent.threadTs ?? null,
+      messageText: parent.text,
+      authorSlackId: parent.user ?? parent.botId ?? "unknown",
+      authorUserId,
+      filesJson: parent.filesJson ?? null,
+    };
+  }
+
+  // Confirm back to the user: a plain post in a DM, an ephemeral in a channel so
+  // we don't clutter it. Best-effort — a failed confirmation must not throw.
+  async function reply(
+    client: unknown,
+    ctx: TextCtx,
+    msg: { text: string; blocks?: unknown[] },
+  ): Promise<void> {
+    const chat = (client as {
+      chat: {
+        postMessage: (a: unknown) => Promise<unknown>;
+        postEphemeral: (a: unknown) => Promise<unknown>;
+      };
+    }).chat;
+    try {
+      if (ctx.isDM) {
+        await chat.postMessage({ channel: ctx.channelId, text: msg.text, ...(msg.blocks ? { blocks: msg.blocks } : {}) });
+      } else {
+        await chat.postEphemeral({
+          channel: ctx.channelId,
+          user: ctx.userSlackId,
+          text: msg.text,
+          ...(msg.blocks ? { blocks: msg.blocks } : {}),
+        });
+      }
+    } catch {
+      // e.g. not_in_channel for an ephemeral: nothing we can do, don't crash.
+    }
+  }
+
+  // DM messages: bare `add`/`list`, anything else → help. Channel messages are
+  // handled via app_mention (below), so we only take im here — this also avoids
+  // double-processing a channel message that also fired app_mention.
+  app.message(async ({ message, context, client }) => {
+    const m = message as {
+      subtype?: string;
+      channel_type?: string;
+      text?: string;
+      user?: string;
+      channel?: string;
+      ts?: string;
+      thread_ts?: string;
+    };
+    if (m.subtype || m.channel_type !== "im" || !m.text || !m.user || !m.channel || !m.ts) return;
+    await handleTextCommand(client, context.teamId, {
+      text: m.text,
+      userSlackId: m.user,
+      channelId: m.channel,
+      ts: m.ts,
+      threadTs: m.thread_ts,
+      isDM: true,
+    });
+  });
+
+  // Channel mentions: `@bot add/done/list/help`.
+  app.event("app_mention", async ({ event, context, client }) => {
+    const e = event as {
+      text?: string;
+      user?: string;
+      channel?: string;
+      ts?: string;
+      thread_ts?: string;
+    };
+    if (!e.text || !e.user || !e.channel || !e.ts) return;
+    await handleTextCommand(client, context.teamId, {
+      text: e.text,
+      userSlackId: e.user,
+      channelId: e.channel,
+      ts: e.ts,
+      threadTs: e.thread_ts,
+      isDM: e.channel.startsWith("D"),
+    });
+  });
+
   // --- Block actions: complete / undo / paginate -------------------------------
   app.action(ACTION_COMPLETE_ITEM, async ({ ack, body, action, client, respond }) => {
     await ack();
@@ -223,10 +409,16 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
   }
 
   // --- Help button -------------------------------------------------------------
-  app.action(ACTION_HELP, async ({ ack, client }) => {
+  // Rendered on the welcome message; replies with the help blocks in place
+  // (ephemeral via the button's response_url) instead of the old no-op.
+  app.action(ACTION_HELP, async ({ ack, respond }) => {
     await ack();
-    // Fire-and-forget: help is informational. Nothing to persist.
-    void client;
+    await respond({
+      response_type: "ephemeral",
+      replace_original: false,
+      text: "Here's how I work",
+      blocks: helpBlocks(config.appName),
+    });
   });
 
   // --- App Home ----------------------------------------------------------------
@@ -365,8 +557,6 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     },
   });
   app.assistant(assistant);
-
-  void helpBlocks; // referenced by the help modal in a later increment
 
   return app;
 }

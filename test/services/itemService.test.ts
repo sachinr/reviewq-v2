@@ -155,6 +155,47 @@ describe("itemService.completeItem", () => {
   });
 });
 
+describe("itemService.completeItemByMessageTs", () => {
+  it("completes the open item matching a source message ts", async () => {
+    const { repo, slack, service } = build();
+    repo.seed(
+      makeItem({
+        id: "it1",
+        channelId: "chan_1",
+        slackMessageTs: "1700000000.000100",
+        authorSlackId: "U_AUTHOR",
+        status: "open",
+      }),
+    );
+
+    const result = await service.completeItemByMessageTs(
+      channel,
+      "1700000000.000100",
+      { userId: "user_completer", slackId: "U_COMPLETER" },
+      NOW,
+    );
+
+    expect(result?.item.status).toBe("complete");
+    expect(slack.callsTo("addReaction")).toHaveLength(1);
+  });
+
+  it("returns null when no open item matches the ts (never queued or already done)", async () => {
+    const { repo, service } = build();
+    repo.seed(makeItem({ id: "it1", channelId: "chan_1", slackMessageTs: "1700000000.000100", status: "complete" }));
+
+    const missing = await service.completeItemByMessageTs(channel, "9999.0001", { userId: "u", slackId: "U" }, NOW);
+    const alreadyDone = await service.completeItemByMessageTs(
+      channel,
+      "1700000000.000100",
+      { userId: "u", slackId: "U" },
+      NOW,
+    );
+
+    expect(missing).toBeNull();
+    expect(alreadyDone).toBeNull();
+  });
+});
+
 describe("itemService.undoComplete", () => {
   it("reopens and removes the reaction when inside the undo window", async () => {
     const { repo, slack, service } = build();

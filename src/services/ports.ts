@@ -44,10 +44,25 @@ export interface ItemRepository {
   findRecentlyClosedByChannel(channelId: string, since: Date): Promise<Item[]>;
 }
 
+/** A single fetched Slack message, normalized for the add-the-parent flow. */
+export interface FetchedMessage {
+  ts: string;
+  text: string | null;
+  user?: string | null;
+  botId?: string | null;
+  threadTs?: string | null;
+  filesJson?: string | null;
+}
+
 export interface SlackGateway {
   getPermalink(channelSlackId: string, messageTs: string): Promise<string | null>;
   /** Post a message to a channel or a user DM (channel = a U… id posts to that user's DM). */
   postMessage(channel: string, text: string, blocks?: unknown[]): Promise<void>;
   addReaction(channelSlackId: string, messageTs: string, name: string): Promise<void>;
   removeReaction(channelSlackId: string, messageTs: string, name: string): Promise<void>;
+  /**
+   * Fetch a single message by ts (used to resolve the parent when someone replies
+   * `@bot add` in a thread). Null when it can't be read.
+   */
+  getMessage(channelSlackId: string, messageTs: string): Promise<FetchedMessage | null>;
 }

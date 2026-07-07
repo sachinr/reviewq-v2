@@ -1,6 +1,7 @@
 import type { AssistantMessage, AssistantThread } from "@prisma/client";
 import {
   ASSISTANT_FALLBACK_REPLY,
+  MAX_HISTORY_MESSAGES,
   createAssistantService,
   createCannedResponder,
   type AssistantStore,
@@ -100,6 +101,29 @@ describe("assistantService", () => {
     expect(store.threads.size).toBe(1);
     // Second call's history includes both prior turns plus the new user turn.
     expect(seen[1].map((t) => t.content)).toEqual(["first", "reply-1", "second"]);
+  });
+
+  it("windows the history sent to the responder to the most recent turns", async () => {
+    const store = new FakeAssistantStore();
+    let seenLen = 0;
+    const responder: Responder = {
+      async reply(history) {
+        seenLen = history.length;
+        return "ok";
+      },
+    };
+    const svc = createAssistantService({ store, responder });
+
+    // Prime the thread with well more than the window of prior turns.
+    const thread = await store.getOrCreateThread(INPUT);
+    for (let i = 0; i < MAX_HISTORY_MESSAGES + 10; i++) {
+      await store.addMessage(thread.id, i % 2 === 0 ? "user" : "assistant", `turn ${i}`);
+    }
+
+    await svc.handleUserMessage(INPUT, "latest", NOW);
+
+    // The responder sees only the tail (the newly-persisted user turn included).
+    expect(seenLen).toBe(MAX_HISTORY_MESSAGES);
   });
 
   it("streams a reply through the sink and persists the assembled text", async () => {

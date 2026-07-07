@@ -23,6 +23,21 @@ export interface TurnView {
 export const ASSISTANT_FALLBACK_REPLY =
   "Sorry — I couldn't come up with a reply just now. Please try again.";
 
+/**
+ * How many of the most recent thread messages to feed the LLM per turn. The
+ * store keeps the full thread durably, but a long-running assistant thread would
+ * otherwise send an ever-growing transcript to the model every turn — unbounded
+ * token cost and eventual context-window overflow. We window to the tail (which
+ * always includes the just-persisted user turn) rather than truncating the head
+ * mid-message. Phase 2 can layer a running summary of the dropped prefix on top.
+ */
+export const MAX_HISTORY_MESSAGES = 20;
+
+/** Keep only the most recent MAX_HISTORY_MESSAGES turns (the tail). */
+function windowHistory(turns: TurnView[]): TurnView[] {
+  return turns.length > MAX_HISTORY_MESSAGES ? turns.slice(-MAX_HISTORY_MESSAGES) : turns;
+}
+
 export interface GetOrCreateThreadInput {
   workspaceId: string;
   appUserId: string;
@@ -83,7 +98,7 @@ export function createAssistantService({ store, responder }: AssistantServiceDep
     const thread = await store.getOrCreateThread(input);
     await store.addMessage(thread.id, "user", text);
 
-    const history = (await store.getMessages(thread.id)).map(toTurnView);
+    const history = windowHistory((await store.getMessages(thread.id)).map(toTurnView));
     const reply = await responder.reply(history, text);
 
     await store.addMessage(thread.id, "assistant", reply);
@@ -113,7 +128,7 @@ export function createAssistantService({ store, responder }: AssistantServiceDep
   ): Promise<{ thread: AssistantThread; reply: string }> {
     const thread = await store.getOrCreateThread(input);
     await store.addMessage(thread.id, "user", text);
-    const history = (await store.getMessages(thread.id)).map(toTurnView);
+    const history = windowHistory((await store.getMessages(thread.id)).map(toTurnView));
 
     let assembled = "";
     if (canStream(responder)) {

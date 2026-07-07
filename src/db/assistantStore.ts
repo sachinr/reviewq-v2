@@ -45,7 +45,10 @@ export function createPrismaAssistantStore(prisma: PrismaClient): AssistantStore
     getMessages(threadId: string): Promise<AssistantMessage[]> {
       return prisma.assistantMessage.findMany({
         where: { assistantThreadId: threadId },
-        orderBy: { createdAt: "asc" },
+        // id is a monotonic cuid, so it breaks ties deterministically when a
+        // user turn and its reply land in the same millisecond (createdAt alone
+        // would leave their order undefined and could flip roles in the history).
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       });
     },
 

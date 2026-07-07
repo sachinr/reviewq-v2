@@ -1,0 +1,87 @@
+{
+  "_comment": "Import at api.slack.com/apps > Create New App > From a manifest. Replace every YOUR_HOST with your deployed HTTPS host (no trailing slash), e.g. reviewed.fly.dev. Bolt's HTTPReceiver serves events + interactivity at /slack/events and OAuth at /slack/oauth_redirect (install at /slack/install).",
+  "display_information": {
+    "name": "Reviewed",
+    "description": "Turn any Slack message into a tracked, completable review item — with an AI teammate.",
+    "background_color": "#2c2d30"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Reviewed",
+      "always_online": true
+    },
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "assistant_view": {
+      "assistant_description": "Ask about your review queue, add items, and mark things done in plain language."
+    },
+    "shortcuts": [
+      {
+        "name": "Add to review queue",
+        "type": "message",
+        "callback_id": "message_action_add",
+        "description": "Flag this message to come back to later."
+      }
+    ],
+    "slash_commands": [
+      {
+        "command": "/reviewed",
+        "url": "https://YOUR_HOST/slack/events",
+        "description": "Show this channel's review queue",
+        "usage_hint": "[private]",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": ["https://YOUR_HOST/slack/oauth_redirect"],
+    "scopes": {
+      "user": ["channels:read", "groups:read", "mpim:read", "im:read"],
+      "bot": [
+        "app_mentions:read",
+        "channels:join",
+        "channels:read",
+        "channels:history",
+        "chat:write",
+        "commands",
+        "groups:read",
+        "groups:history",
+        "im:history",
+        "im:read",
+        "mpim:read",
+        "mpim:history",
+        "reactions:read",
+        "reactions:write",
+        "team:read",
+        "users:read",
+        "assistant:write",
+        "metadata.message:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://YOUR_HOST/slack/events",
+      "bot_events": [
+        "app_mention",
+        "message.im",
+        "app_home_opened",
+        "member_joined_channel",
+        "app_uninstalled",
+        "tokens_revoked",
+        "assistant_thread_started",
+        "assistant_thread_context_changed"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://YOUR_HOST/slack/events"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

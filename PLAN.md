@@ -18,7 +18,7 @@
 
 ## Implementation status
 
-All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to `origin`). Git history is the source of truth; this section is the human-readable summary. **53 tests passing, `tsc --noEmit` clean.**
+All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to `origin`). Git history is the source of truth; this section is the human-readable summary. **74 tests passing, `tsc --noEmit` clean.**
 
 **Environment note:** the build sandbox has **no Docker / Postgres / Redis / live Slack**. So DB/queue/OAuth integration tests run in **CI**, not locally; pure business logic is fully tested in-sandbox against fakes. Dependency versions resolved & verified: Bolt 4.7.3, Prisma 5.22, Anthropic SDK 0.32.1, BullMQ 5.79.
 
@@ -26,7 +26,7 @@ All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to
 - Scaffold + `prisma/schema.prisma` (Workspace / AppUser / Channel / Item, channel-scoped, `status` enum, nullable `authorUserId` + raw `authorSlackId`; AssistantThread / AssistantMessage) + initial migration `prisma/migrations/0001_init`.
 - Core (tested vs fakes): `services/itemService.ts` (10), `slack/queueRenderer.ts` + `slack/blocks.ts` (6), `slack/streamBridge.ts` (5), `slack/resolver.ts` (Slack-id → row resolution), `services/assistantService.ts` (thread memory + `Responder` port + canned stand-in), `crypto/tokenCipher.ts` (AES-256-GCM at-rest token encryption).
 - Adapters (thin, I/O): `db/{prisma,itemRepository,workspaceStore,assistantStore}.ts`, `slack/slackClient.ts`, `slack/installationStore.ts` (Bolt OAuth), `slack/anthropicChat.ts`.
-- Bolt wiring (`slack/app.ts`, `src/index.ts`, `src/config.ts`): OAuth install store; all classic surfaces — slash command, message action `message_action_add`, Mark-Done/Undo/paginate buttons, App Home, `member_joined_channel` welcome; and the **Assistant surface** — `threadStarted` (welcome + static suggested prompts) and `userMessage` (persists each turn, `setStatus("is thinking…")`, replies via a swappable `Responder`).
+- Bolt wiring (`slack/app.ts`, `src/index.ts`, `src/config.ts`): OAuth install store (+ `app_uninstalled`/`tokens_revoked`); all classic surfaces — slash command, message action `message_action_add`, the classic text commands (`@bot add|done|list|help` via `app_mention`, DM `add`/`list` via `app.message`, parser in `slack/messageCommands.ts`), Mark-Done/Undo/paginate buttons, App Home (per-channel open counts scoped to the viewer's channels), `member_joined_channel` welcome, live Help button; and the **Assistant surface** — `threadStarted` (welcome + static suggested prompts) and `userMessage` (persists each turn, `setStatus("is thinking…")`, replies via a swappable `Responder`).
 
 **Phase 2 — started.**
 - `services/anthropicResponder.ts` (+ tests, vs a fake `AnthropicChat`): Anthropic-backed `StreamingResponder` implementing the same `Responder` port; exposes `replyStream()` (text-delta `AsyncIterable`) plus a `reply()` that assembles the full string. `slack/anthropicChat.ts` is the SDK adapter (model via `ANTHROPIC_MODEL`, default `claude-sonnet-5`). Selected when `ANTHROPIC_API_KEY` is set, else the canned Phase 1 responder.
@@ -40,24 +40,26 @@ All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to
 
 Phases 2 (rest) – 4 (summaries, vague-detection, tool-calling teammate, semantic dedup, digests, stretch MCP/Workflow-steps) remain plan-text — see Phasing below.
 
-## Open review findings (review pass @ commit 15cf107 — fix before/with next build)
+## Open review findings (review pass @ commit 15cf107) — all resolved
 
 Solid: ports/adapters split, `tokenCipher` (AES-256-GCM, random IV + auth tag), streaming sink + `streamBridge` backoff, idempotent upserts.
 
+All nine findings from the 15cf107 review pass are fixed (commits after 15cf107 up to and including the App Home rebuild). Summary of what changed:
+
 **High**
-1. **App Home always empty** (`slack/app.ts:245`): `resolveChannel(workspace, event.user)` uses the user's `U…` id as a channel id, but items are only stored under `C/G/D…` ids — so it never matches. Regression vs classic App Home (which listed channels-with-open-counts via the user token). Untested.
+1. ✅ **App Home rebuilt** — was resolving the viewer's `U…` id as a channel id and always came up empty. Now lists the channels the *viewing* user belongs to (membership from their own user token via paginated `conversations.list`) with per-channel open counts; renders an auth prompt when no user token is stored. Pure `homeView({authNeeded|channels})` builder + `itemService.openCountsByChannels` + `WorkspaceStore.listChannels`, all tested.
 
 **Medium**
-2. **Uninstalls never recorded**: no `app_uninstalled`/`tokens_revoked` listener, so `installationStore.deleteInstallation` is dead code and `Workspace.isActive` never flips to false. Add the event listener that calls it.
-3. **Classic `@bot add` / DM add-done-list entry points missing**: no `app.message`/`app_mention` listeners — only message-action + slash were rebuilt. Parity gap vs the classic three add paths.
-4. **Installer user token stored but never returned** (`slack/installationStore.ts:98` hardcodes `user:{id:"",token:undefined}`): dead encrypted data; blocks the user-token App Home feature (ties to #1).
-5. **No ownership guard on complete/undo** (`services/itemService.ts`, called `slack/app.ts:162-177`): item loaded by id from a button value and mutated without asserting `item.channelId === channel.id`/`workspaceId`. Not exploitable via signed Slack payloads today, but it is the plan's authorization boundary and becomes load-bearing when the assistant mutates items by NL. Add the guard.
-6. **Phase-2 scopes absent** (`config.ts:43` `BOT_SCOPES`): no `channels:history`/`groups:history`/`mpim:history`/`metadata.message:read` — thread-context summarization and `sourceMetadataKey` correlation can't work until added + re-consented.
+2. ✅ **Uninstalls recorded** — `app_uninstalled` + `tokens_revoked` listeners call `installationStore.deleteInstallation`, flipping `Workspace.isActive` false.
+3. ✅ **Classic text entry points restored** — pure `messageCommands.parseBotCommand` (unit-tested) + `app.message` (DM) / `app_mention` (channel) listeners rebuild the `@bot add|done|list|help` and DM `add`/`list` paths; `@bot add` thread-reply adds the parent (`SlackGateway.getMessage`), `@bot done` via `itemService.completeItemByMessageTs`.
+4. ✅ **Installer user token returned** — `fetchInstallation` decrypts and returns the requested user's stored token; the app now requests `userScopes` at install so a token is actually granted.
+5. ✅ **Ownership guard** — `completeItem`/`undoComplete` assert the loaded item belongs to the resolved channel+workspace before mutating. Tested.
+6. ✅ **Phase-2 scopes added** — `channels:history` / `groups:history` / `mpim:history` / `metadata.message:read` in `BOT_SCOPES`.
 
 **Low**
-7. **Unbounded assistant history to the LLM** (`db/assistantStore.ts` `getMessages` returns the whole thread every turn): token-cost/context growth; needs windowing in Phase 2.
-8. **Help button is a live no-op** (`slack/app.ts:224-228`; `helpBlocks` void-referenced): known stub, but the button renders.
-9. **Assistant message ordering tiebreak** (`getMessages` orders by `createdAt` only): add an id/seq tiebreaker for same-ms inserts. Very low.
+7. ✅ **Assistant history windowed** — `assistantService` sends only the last `MAX_HISTORY_MESSAGES` turns to the LLM; full thread stays durable. Tested.
+8. ✅ **Help button live** — replies with the help blocks via its `response_url`.
+9. ✅ **Ordering tiebreak** — `getMessages` orders by `(createdAt, id)`.
 
 ---
 

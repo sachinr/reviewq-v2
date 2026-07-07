@@ -1,5 +1,11 @@
 import { createItemService } from "../../src/services/itemService";
-import { UNDO_WINDOW_MS, type ChannelContext, type SourceMessage } from "../../src/services/ports";
+import {
+  UNDO_WINDOW_MS,
+  type ChannelContext,
+  type CompletionNotification,
+  type Notifier,
+  type SourceMessage,
+} from "../../src/services/ports";
 import { FakeItemRepository, FakeSlackGateway, makeItem } from "../fakes";
 
 const NOW = new Date("2026-07-05T12:00:00.000Z");
@@ -110,6 +116,38 @@ describe("itemService.completeItem", () => {
     const dms = slack.callsTo("postMessage");
     expect(dms).toHaveLength(1);
     expect(dms[0].args[0]).toBe("U_AUTHOR");
+  });
+
+  it("routes the author DM through an injected notifier instead of posting inline", async () => {
+    const repo = new FakeItemRepository();
+    const slack = new FakeSlackGateway();
+    const notifications: CompletionNotification[] = [];
+    const notifier: Notifier = {
+      async notifyCompletion(n) {
+        notifications.push(n);
+      },
+    };
+    const service = createItemService({ repo, slack, notifier });
+    repo.seed(
+      makeItem({ id: "it1", channelId: "chan_1", workspaceId: "ws_1", authorSlackId: "U_AUTHOR", status: "open" }),
+    );
+
+    const result = await service.completeItem(
+      "it1",
+      channel,
+      { userId: "user_completer", slackId: "U_COMPLETER" },
+      NOW,
+    );
+
+    // The DM is enqueued (durable), not posted synchronously through the gateway.
+    expect(result.notifiedAuthor).toBe(true);
+    expect(slack.callsTo("postMessage")).toHaveLength(0);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toEqual({
+      workspaceId: "ws_1",
+      recipientSlackId: "U_AUTHOR",
+      text: expect.stringContaining("marked as complete"),
+    });
   });
 
   it("does not DM the author when the completer IS the author", async () => {

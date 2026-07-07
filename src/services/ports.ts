@@ -68,3 +68,29 @@ export interface SlackGateway {
    */
   getMessage(channelSlackId: string, messageTs: string): Promise<FetchedMessage | null>;
 }
+
+/**
+ * A completion notification: the DM Reviewed sends the original author when
+ * someone else marks their message done. Carried as data (not a live Slack call)
+ * so it can be handed to a durable, retry-safe transport instead of being fired
+ * synchronously — `workspaceId` lets the worker re-mint the right per-workspace
+ * bot-token client to deliver it.
+ */
+export interface CompletionNotification {
+  workspaceId: string;
+  /** The Slack user/id to DM (the flagged message's author). */
+  recipientSlackId: string;
+  text: string;
+}
+
+/**
+ * The outbound side of a completion. The old app made this a synchronous
+ * fire-and-forget `chat.postMessage`, so a transient Slack failure silently lost
+ * the author's notification. The port lets itemService stay ignorant of *how*
+ * the DM is delivered: the default inline notifier keeps the direct call (used by
+ * unit tests), while production binds a BullMQ-backed notifier that enqueues a
+ * `notification-jobs` job for the worker to deliver with retries/backoff.
+ */
+export interface Notifier {
+  notifyCompletion(notification: CompletionNotification): Promise<void>;
+}

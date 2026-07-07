@@ -5,7 +5,7 @@
 // Pure and deterministic: no I/O, no Slack client — trivially unit-testable.
 
 import type { Item } from "@prisma/client";
-import type { KnownBlock } from "@slack/types";
+import type { Button, KnownBlock } from "@slack/types";
 
 export const PAGE_SIZE = 5;
 
@@ -99,15 +99,15 @@ function pageButton(text: string, page: number) {
   };
 }
 
-function button(text: string, actionId: string, value: string, style?: "primary" | "danger") {
-  const b: Record<string, unknown> = {
+function button(text: string, actionId: string, value: string, style?: "primary" | "danger"): Button {
+  const b: Button = {
     type: "button",
     text: { type: "plain_text", text },
     action_id: actionId,
     value,
   };
   if (style) b.style = style;
-  return b as any;
+  return b;
 }
 
 function sectionText(text: string): KnownBlock {

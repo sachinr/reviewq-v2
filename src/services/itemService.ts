@@ -12,6 +12,7 @@ import {
   UNDO_WINDOW_MS,
   type ChannelContext,
   type ItemRepository,
+  type Notifier,
   type SlackGateway,
   type SourceMessage,
 } from "./ports";
@@ -61,9 +62,18 @@ export interface QueueView {
 export interface ItemServiceDeps {
   repo: ItemRepository;
   slack: SlackGateway;
+  /**
+   * How the author's completion DM is delivered. Defaults to an inline notifier
+   * that posts straight through the SlackGateway — which keeps the pure unit
+   * tests DB/Redis-free. Production injects the BullMQ-backed notifier so the DM
+   * survives transient Slack failures via the worker's retry/backoff.
+   */
+  notifier?: Notifier;
 }
 
-export function createItemService({ repo, slack }: ItemServiceDeps) {
+export function createItemService({ repo, slack, notifier }: ItemServiceDeps) {
+  const notify = notifier ?? createInlineNotifier(slack);
+
   async function createItem(
     channel: ChannelContext,
     source: SourceMessage,
@@ -112,7 +122,11 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
 
     let notifiedAuthor = false;
     if (item.authorSlackId !== completer.slackId) {
-      await slack.postMessage(item.authorSlackId, completionDmText(item, completer.slackId));
+      await notify.notifyCompletion({
+        workspaceId: item.workspaceId,
+        recipientSlackId: item.authorSlackId,
+        text: completionDmText(item, completer.slackId),
+      });
       notifiedAuthor = true;
     }
 
@@ -190,6 +204,19 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
 }
 
 export type ItemService = ReturnType<typeof createItemService>;
+
+/**
+ * The default `Notifier`: deliver the completion DM synchronously through the
+ * SlackGateway, exactly as the service did before the queue existed. Used by unit
+ * tests and as a safe fallback when no durable notifier is injected.
+ */
+function createInlineNotifier(slack: SlackGateway): Notifier {
+  return {
+    async notifyCompletion({ recipientSlackId, text }) {
+      await slack.postMessage(recipientSlackId, text);
+    },
+  };
+}
 
 function byCreation(a: Item, b: Item): number {
   const t = a.createdAt.getTime() - b.createdAt.getTime();

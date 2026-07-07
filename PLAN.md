@@ -18,7 +18,7 @@
 
 ## Implementation status
 
-All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to `origin`). Git history is the source of truth; this section is the human-readable summary. **74 tests passing, `tsc --noEmit` clean.**
+All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to `origin`). Git history is the source of truth; this section is the human-readable summary. **82 unit tests passing, `tsc --noEmit` and `npm run lint` clean.** Two further integration suites (`test/db/*.integration.test.ts`, `test/jobs/notificationQueue.integration.test.ts`) `describe.skip` in the sandbox and run in CI against real Postgres/Redis.
 
 **Environment note:** the build sandbox has **no Docker / Postgres / Redis / live Slack**. So DB/queue/OAuth integration tests run in **CI**, not locally; pure business logic is fully tested in-sandbox against fakes. Dependency versions resolved & verified: Bolt 4.7.3, Prisma 5.22, Anthropic SDK 0.32.1, BullMQ 5.79.
 
@@ -33,10 +33,10 @@ All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to
 
 **LIVE STREAMING — done.** The assistant's `userMessage` handler no longer posts the whole reply at once. A new adapter `slack/slackStreamSink.ts` wraps `chat.startStream` / `chat.appendStream` / `chat.stopStream` behind `streamBridge`'s `StreamSink` port (lazy start on first append, idempotent stop, Slack rate-limit errors translated into `streamBridge`'s `RateLimited` shape so the existing 429 backoff drives retries). `assistantService.handleUserMessageStreaming` persists the user turn, pumps `anthropicResponder.replyStream()` → `streamBridge.pumpStream()` → the sink while assembling the text, then persists the assembled reply (canonical DB record unchanged); it duck-type-falls-back to `reply()` for the canned responder and to a plain `say()` when the model streams nothing. The handler (`slack/app.ts`) builds the sink from the per-request WebClient and stops it in a `finally`. Tested with a fake `chat.*Stream` client (start/append/stop sequencing, no-op empty stop, rate-limit translation, pumpStream cooperation) and a fake store + streaming responder (streamed persistence, non-streaming fallback, empty fallback).
 
-**Remaining after that (Phase 1 tail + infra):**
-- BullMQ `notification-jobs` queue + `notificationWorker` (retry-safe outbound Slack calls) — integration test **gated on `REDIS_URL`** (CI-only).
-- Adapter integration tests **gated on `DATABASE_URL`** (Prisma stores, real Postgres) — CI-only.
-- CI workflow (GitHub Actions) with Postgres + Redis service containers; fixtures incl. adversarial prompt-injection fixtures scaffolded for Phase 2 gating.
+**Phase 1 tail + infra — done.**
+- BullMQ `notification-jobs` queue + `notificationWorker` (retry-safe outbound Slack calls). The author-completion DM — the classic app's canonical fire-and-forget call — now flows through a `Notifier` port (`services/ports.ts`): itemService enqueues instead of posting inline (default inline notifier retained so the pure unit tests stay DB/Redis-free), and `jobs/worker.ts` (`npm run start:worker`) re-mints the per-workspace bot-token client and delivers with BullMQ attempts/backoff (`UnrecoverableError` for a dead/uninstalled workspace). Pure handler `jobs/notificationQueue.runNotificationJob` unit-tested vs the fake gateway; end-to-end producer→worker→delivery **gated on `REDIS_URL`** (`test/jobs/notificationQueue.integration.test.ts`).
+- Adapter integration tests **gated on `DATABASE_URL`** (`test/db/prismaAdapters.integration.test.ts`): Prisma ItemRepository/WorkspaceStore/AssistantStore round-trips against real Postgres — idempotent upserts, composite-key resolution, status transitions, deterministic history ordering.
+- CI workflow (`.github/workflows/ci.yml`): Postgres 16 + Redis 7 service containers, `prisma migrate deploy`, then `tsc` + `lint` + full `npm test` (the env-gated suites light up here). Added the previously-missing `.eslintrc.json` so `npm run lint` is a real gate. Adversarial prompt-injection fixtures scaffolded under `test/fixtures/prompt-injection/` with a shape test (`promptInjection.test.ts`) that keeps them well-formed until the Phase 2 tool-calling suite gates on their behavioral assertions.
 
 Phases 2 (rest) – 4 (summaries, vague-detection, tool-calling teammate, semantic dedup, digests, stretch MCP/Workflow-steps) remain plan-text — see Phasing below.
 

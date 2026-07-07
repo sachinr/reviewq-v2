@@ -18,6 +18,8 @@ import { createPrismaItemRepository } from "../db/itemRepository";
 import { createPrismaWorkspaceStore } from "../db/workspaceStore";
 import { createPrismaAssistantStore } from "../db/assistantStore";
 import { createItemService } from "../services/itemService";
+import { createNotificationQueue } from "../jobs/bullNotificationQueue";
+import { createRedisConnection } from "../jobs/connection";
 import { createAssistantService, createCannedResponder } from "../services/assistantService";
 import { createAnthropicResponder } from "../services/anthropicResponder";
 import { createAnthropicChat } from "./anthropicChat";
@@ -62,6 +64,11 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
 
   const installationStore = createInstallationStore(prisma, cipher);
 
+  // Outbound author-completion DMs go through BullMQ so a transient Slack failure
+  // is retried by the worker rather than silently dropped (the classic app's
+  // biggest structural gap). The queue opens its own Redis connection lazily.
+  const notifier = createNotificationQueue(createRedisConnection(config.redisUrl));
+
   const app = new App({
     signingSecret: config.slack.signingSecret,
     clientId: config.slack.clientId,
@@ -81,7 +88,7 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     return {
       slack,
       resolver: createResolver({ store: workspaceStore, slack }),
-      items: createItemService({ repo: itemRepo, slack }),
+      items: createItemService({ repo: itemRepo, slack, notifier }),
     };
   }
 
@@ -515,7 +522,7 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
   // Persists every turn so context survives across messages/restarts; replies via
   // the injected Responder (canned now, Anthropic-backed in Phase 2).
   const assistant = new Assistant({
-    threadStarted: async ({ event, say, saveThreadContext, setSuggestedPrompts }) => {
+    threadStarted: async ({ say, saveThreadContext, setSuggestedPrompts }) => {
       await say(
         `Hi! I'm the ${config.appName} assistant. Ask me about your review queue, ` +
           `or use the message action on any message to add it.`,

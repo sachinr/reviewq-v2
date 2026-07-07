@@ -57,6 +57,14 @@ export const BOT_SCOPES = [
   // New in v2: the Assistant surface needs assistant:write to post into the
   // assistant thread and stream replies.
   "assistant:write",
+  // Phase 2: reading thread/message content for auto-summarization and vague-item
+  // detection, plus message metadata to correlate an item back to its source
+  // message (Item.sourceMetadataKey) more robustly than (channelId, ts) alone.
+  // These require re-consent, so they're added ahead of the features that use them.
+  "channels:history",
+  "groups:history",
+  "mpim:history",
+  "metadata.message:read",
 ];
 
 export const USER_SCOPES = ["channels:read", "groups:read", "mpim:read", "im:read"];

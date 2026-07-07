@@ -57,13 +57,15 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     responder,
   });
 
+  const installationStore = createInstallationStore(prisma, cipher);
+
   const app = new App({
     signingSecret: config.slack.signingSecret,
     clientId: config.slack.clientId,
     clientSecret: config.slack.clientSecret,
     stateSecret: config.slack.stateSecret,
     scopes: config.slack.scopes,
-    installationStore: createInstallationStore(prisma, cipher),
+    installationStore,
     installerOptions: { directInstall: true },
     logLevel: config.nodeEnv === "development" ? LogLevel.DEBUG : LogLevel.INFO,
   });
@@ -268,6 +270,29 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       text: "Thanks for adding me!",
       blocks: welcomeBlocks(),
     });
+  });
+
+  // --- Uninstall / token revocation --------------------------------------------
+  // Slack fires app_uninstalled when the app is removed and tokens_revoked when a
+  // user revokes. Either way the stored bot token is dead, so mark the workspace
+  // inactive (fetchInstallation then refuses it) instead of leaving a stale,
+  // decryptable token that would 401 on every future event.
+  async function recordUninstall(context: {
+    teamId?: string;
+    enterpriseId?: string;
+    isEnterpriseInstall?: boolean;
+  }): Promise<void> {
+    await installationStore.deleteInstallation?.({
+      teamId: context.teamId,
+      enterpriseId: context.enterpriseId,
+      isEnterpriseInstall: context.isEnterpriseInstall ?? false,
+    } as never);
+  }
+  app.event("app_uninstalled", async ({ context }) => {
+    await recordUninstall(context);
+  });
+  app.event("tokens_revoked", async ({ context }) => {
+    await recordUninstall(context);
   });
 
   // --- Assistant surface (Phase 1 skeleton) ------------------------------------

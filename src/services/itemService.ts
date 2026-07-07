@@ -18,6 +18,20 @@ import {
 
 const DONE_REACTION = "white_check_mark";
 
+/**
+ * Authorization boundary. An item is mutated by id taken from a button value (and
+ * in Phase 3 from an LLM tool call), so before touching it we assert it actually
+ * belongs to the channel/workspace the request was resolved against. Not
+ * exploitable via signed Slack payloads today, but this is the plan's stated
+ * authorization boundary and becomes load-bearing once the assistant mutates
+ * items by natural language.
+ */
+function assertOwnership(item: Item, channel: ChannelContext, op: string): void {
+  if (item.channelId !== channel.id || item.workspaceId !== channel.workspaceId) {
+    throw new Error(`${op}: item ${item.id} does not belong to channel ${channel.id}`);
+  }
+}
+
 export interface CreateItemResult {
   item: Item;
   /** true when an identical open item already existed (no-op add). */
@@ -88,6 +102,7 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
   ): Promise<CompleteItemResult> {
     const existing = await repo.findById(itemId);
     if (!existing) throw new Error(`completeItem: item ${itemId} not found`);
+    assertOwnership(existing, channel, "completeItem");
 
     const item = await repo.markComplete(itemId, completer.userId, now);
 
@@ -107,6 +122,7 @@ export function createItemService({ repo, slack }: ItemServiceDeps) {
   async function undoComplete(itemId: string, channel: ChannelContext, now: Date): Promise<UndoResult> {
     const existing = await repo.findById(itemId);
     if (!existing) throw new Error(`undoComplete: item ${itemId} not found`);
+    assertOwnership(existing, channel, "undoComplete");
 
     const within =
       existing.completedAt != null && now.getTime() - existing.completedAt.getTime() <= UNDO_WINDOW_MS;

@@ -130,6 +130,29 @@ describe("itemService.completeItem", () => {
 
     expect(slack.callsTo("addReaction")).toHaveLength(0);
   });
+
+  it("refuses to complete an item that belongs to a different channel (authorization boundary)", async () => {
+    const { repo, slack, service } = build();
+    // Item lives in another channel of the same workspace; the payload's channel
+    // must not be able to mutate it.
+    repo.seed(makeItem({ id: "it1", channelId: "chan_OTHER", status: "open" }));
+
+    await expect(
+      service.completeItem("it1", channel, { userId: "u", slackId: "U_C" }, NOW),
+    ).rejects.toThrow(/does not belong/i);
+    // No mutation, no Slack side effects leaked.
+    expect((await repo.findById("it1"))?.status).toBe("open");
+    expect(slack.calls).toHaveLength(0);
+  });
+
+  it("refuses to complete an item from a different workspace", async () => {
+    const { repo, service } = build();
+    repo.seed(makeItem({ id: "it1", channelId: "chan_1", workspaceId: "ws_OTHER", status: "open" }));
+
+    await expect(
+      service.completeItem("it1", channel, { userId: "u", slackId: "U_C" }, NOW),
+    ).rejects.toThrow(/does not belong/i);
+  });
 });
 
 describe("itemService.undoComplete", () => {
@@ -156,6 +179,15 @@ describe("itemService.undoComplete", () => {
     expect(result.withinWindow).toBe(false);
     expect(result.item.status).toBe("complete");
     expect(slack.callsTo("removeReaction")).toHaveLength(0);
+  });
+
+  it("refuses to undo an item that belongs to a different channel (authorization boundary)", async () => {
+    const { repo, service } = build();
+    const completedAt = new Date(NOW.getTime() - 1000);
+    repo.seed(makeItem({ id: "it1", channelId: "chan_OTHER", status: "complete", completedByUserId: "u", completedAt }));
+
+    await expect(service.undoComplete("it1", channel, NOW)).rejects.toThrow(/does not belong/i);
+    expect((await repo.findById("it1"))?.status).toBe("complete");
   });
 });
 

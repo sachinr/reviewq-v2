@@ -40,6 +40,25 @@ All work is committed to branch `claude/slack-tool-ai-rebuild-e1ll6r` (pushed to
 
 Phases 2 (rest) – 4 (summaries, vague-detection, tool-calling teammate, semantic dedup, digests, stretch MCP/Workflow-steps) remain plan-text — see Phasing below.
 
+## Open review findings (review pass @ commit 15cf107 — fix before/with next build)
+
+Solid: ports/adapters split, `tokenCipher` (AES-256-GCM, random IV + auth tag), streaming sink + `streamBridge` backoff, idempotent upserts.
+
+**High**
+1. **App Home always empty** (`slack/app.ts:245`): `resolveChannel(workspace, event.user)` uses the user's `U…` id as a channel id, but items are only stored under `C/G/D…` ids — so it never matches. Regression vs classic App Home (which listed channels-with-open-counts via the user token). Untested.
+
+**Medium**
+2. **Uninstalls never recorded**: no `app_uninstalled`/`tokens_revoked` listener, so `installationStore.deleteInstallation` is dead code and `Workspace.isActive` never flips to false. Add the event listener that calls it.
+3. **Classic `@bot add` / DM add-done-list entry points missing**: no `app.message`/`app_mention` listeners — only message-action + slash were rebuilt. Parity gap vs the classic three add paths.
+4. **Installer user token stored but never returned** (`slack/installationStore.ts:98` hardcodes `user:{id:"",token:undefined}`): dead encrypted data; blocks the user-token App Home feature (ties to #1).
+5. **No ownership guard on complete/undo** (`services/itemService.ts`, called `slack/app.ts:162-177`): item loaded by id from a button value and mutated without asserting `item.channelId === channel.id`/`workspaceId`. Not exploitable via signed Slack payloads today, but it is the plan's authorization boundary and becomes load-bearing when the assistant mutates items by NL. Add the guard.
+6. **Phase-2 scopes absent** (`config.ts:43` `BOT_SCOPES`): no `channels:history`/`groups:history`/`mpim:history`/`metadata.message:read` — thread-context summarization and `sourceMetadataKey` correlation can't work until added + re-consented.
+
+**Low**
+7. **Unbounded assistant history to the LLM** (`db/assistantStore.ts` `getMessages` returns the whole thread every turn): token-cost/context growth; needs windowing in Phase 2.
+8. **Help button is a live no-op** (`slack/app.ts:224-228`; `helpBlocks` void-referenced): known stub, but the button renders.
+9. **Assistant message ordering tiebreak** (`getMessages` orders by `createdAt` only): add an id/seq tiebreaker for same-ms inserts. Very low.
+
 ---
 
 ## Recommended stack

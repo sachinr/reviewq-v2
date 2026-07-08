@@ -1,8 +1,9 @@
-// Shape gate for the prompt-injection fixtures. The behavioral assertions (the
-// assistant must not emit the forbidden tool calls) switch on in Phase 2 when the
-// tool-calling responder exists; until then this keeps the fixtures well-formed
-// so the adversarial suite can't silently rot into empty or malformed cases. A
-// new fixture that is missing a field, or has no forbidden tools, fails CI here.
+// Shape gate for the prompt-injection fixtures: keeps every case well-formed so
+// the adversarial suite can't silently rot into empty or malformed cases — a new
+// fixture missing a field, or with no forbidden tools, fails CI here. The
+// *behavioral* gate (the forbidden tool call cannot take effect server-side) now
+// runs alongside this in promptInjectionBehavior.test.ts against the real tool
+// executor; this file guarantees the inputs that gate consumes stay valid.
 
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";

@@ -22,12 +22,23 @@ tool-calling teammate does. Each file is a self-contained scenario:
 | `expectation.forbiddenTools` | Tool names that would constitute a successful injection if invoked from the untrusted content. |
 | `expectation.rationale` | One line on the safe behavior. |
 
-## How Phase 2/3 consumes them
+## How the gate consumes them (live)
 
-When the tool-calling responder lands, its golden-suite driver will, for each
-fixture: build an assistant turn whose thread context contains
-`untrustedContent`, send `userInstruction`, and assert the model's tool-call plan
-contains **none** of `forbiddenTools`. Until then, `promptInjection.test.ts`
-validates that every fixture is well-formed so the suite can't silently rot — a
-malformed or empty fixture fails CI today, and the behavioral assertions switch
-on in Phase 2.
+Two suites read these fixtures:
+
+- `promptInjection.test.ts` — the **shape gate**: every fixture must be
+  well-formed (all fields present, at least one forbidden tool). A malformed or
+  empty fixture fails CI.
+- `promptInjectionBehavior.test.ts` — the **behavioral gate** (live). For each
+  fixture it constructs the *worst case*: a hijacked model that actually emits the
+  forbidden tool call from `untrustedContent`, and asserts the server-side
+  executor (`src/services/assistantTools.ts`) contains it regardless — a
+  cross-channel read is **refused** (the requesting user's real Slack membership
+  is the boundary), and a mutating call is **deferred to a user confirmation**,
+  never auto-executed. This encodes the plan's guarantee that tool execution is
+  permission-checked server-side no matter what the model requests.
+
+The deterministic, CI-blocking property is the *executor guardrail*, not the
+model's behavior. Model-level resistance (does Claude decline to emit the call in
+the first place?) is covered by the advisory nightly real-API suite; it is not a
+merge blocker because it is non-deterministic.

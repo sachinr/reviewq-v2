@@ -10,6 +10,7 @@ import type { PrismaClient } from "@prisma/client";
 import { createPrismaItemRepository } from "../../src/db/itemRepository";
 import { createPrismaWorkspaceStore } from "../../src/db/workspaceStore";
 import { createPrismaAssistantStore } from "../../src/db/assistantStore";
+import { createPrismaTriageStore } from "../../src/db/triageStore";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const describeIf = DATABASE_URL ? describe : describe.skip;
@@ -154,6 +155,57 @@ describeIf("Prisma adapters (integration, DATABASE_URL)", () => {
       await assistant.touch(t1.id, at);
       const refreshed = await prisma.assistantThread.findUnique({ where: { id: t1.id } });
       expect(refreshed?.lastActiveAt.getTime()).toBe(at.getTime());
+    });
+  });
+
+  describe("TriageStore", () => {
+    it("upserts an item's summary and clarification idempotently on itemId", async () => {
+      const store = createPrismaWorkspaceStore(prisma);
+      const repo = createPrismaItemRepository(prisma);
+      const triage = createPrismaTriageStore(prisma);
+
+      const channel = await store.upsertChannel({
+        workspaceId,
+        slackChannelId: "C_TRIAGE",
+        name: "triage",
+        type: "channel",
+        isBotMember: true,
+        isPrivate: false,
+      });
+      const flagger = await store.upsertUser({ workspaceId, slackUserId: "U_TRIAGE" });
+      const item = await repo.create({
+        workspaceId,
+        channelId: channel.id,
+        slackMessageTs: "1700000002.000200",
+        slackThreadTs: null,
+        messageText: "review the long thread about the contract",
+        permalink: null,
+        filesJson: null,
+        authorSlackId: "U_AUTHOR",
+        authorUserId: null,
+        flaggedByUserId: flagger.id,
+      });
+
+      await triage.saveSummary(item.id, "Sign and return the NDA.", "claude-haiku-4-5");
+      await triage.saveSummary(item.id, "Sign and return the updated NDA.", "claude-haiku-4-5");
+      const summary = await prisma.itemSummary.findUnique({ where: { itemId: item.id } });
+      expect(summary?.summary).toBe("Sign and return the updated NDA."); // upserted in place, one row
+
+      await triage.saveClarification(item.id, "Which contract?", "claude-haiku-4-5");
+      let clar = await prisma.itemClarificationRequest.findUnique({ where: { itemId: item.id } });
+      expect(clar?.status).toBe("open");
+
+      // Resolve it, then re-triage: the request resets to open with the new question.
+      await prisma.itemClarificationRequest.update({ where: { itemId: item.id }, data: { status: "resolved" } });
+      await triage.saveClarification(item.id, "Which version of the contract?", "claude-haiku-4-5");
+      clar = await prisma.itemClarificationRequest.findUnique({ where: { itemId: item.id } });
+      expect(clar?.question).toBe("Which version of the contract?");
+      expect(clar?.status).toBe("open");
+
+      // Deleting the item cascades both triage rows away.
+      await prisma.item.delete({ where: { id: item.id } });
+      expect(await prisma.itemSummary.findUnique({ where: { itemId: item.id } })).toBeNull();
+      expect(await prisma.itemClarificationRequest.findUnique({ where: { itemId: item.id } })).toBeNull();
     });
   });
 });

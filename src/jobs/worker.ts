@@ -16,6 +16,7 @@ import type { Redis } from "ioredis";
 import type { SlackGateway } from "../services/ports";
 import { bullConnection } from "./connection";
 import { NOTIFICATION_QUEUE_NAME, runNotificationJob, type NotificationJob } from "./notificationQueue";
+import { TRIAGE_QUEUE_NAME } from "./triageQueue";
 
 export interface NotificationWorkerDeps {
   connection: Redis;
@@ -45,31 +46,73 @@ async function main(): Promise<void> {
   const { prisma } = await import("../db/prisma");
   const { SlackClient } = await import("../slack/slackClient");
   const { createRedisConnection } = await import("./connection");
+  const { createTriageWorker } = await import("./triageWorker");
+  const { createPrismaTriageStore } = await import("../db/triageStore");
+  const { createTriageModel } = await import("../llm/client");
 
   const config = loadConfig();
   const cipher = createTokenCipher(config.tokenEncryptionKey);
   const connection = createRedisConnection(config.redisUrl);
 
-  const worker = createNotificationWorker({
-    connection,
-    async gatewayForWorkspace(workspaceId) {
-      const ws = await prisma.workspace.findUnique({ where: { id: workspaceId } });
-      if (!ws || !ws.isActive) {
-        // A job for an uninstalled workspace: don't retry forever against a dead
-        // token — UnrecoverableError skips remaining attempts and fails the job.
-        throw new UnrecoverableError(`workspace ${workspaceId} not found or inactive`);
-      }
-      return new SlackClient(new WebClient(cipher.decrypt(ws.botTokenEncrypted)));
-    },
-  });
+  // Shared per-workspace bot-client resolver: re-mints the WebClient for a live
+  // workspace and refuses a dead/uninstalled one so BullMQ stops retrying it.
+  async function gatewayForWorkspace(workspaceId: string): Promise<SlackGateway> {
+    const ws = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+    if (!ws || !ws.isActive) {
+      // A job for an uninstalled workspace: don't retry forever against a dead
+      // token — UnrecoverableError skips remaining attempts and fails the job.
+      throw new UnrecoverableError(`workspace ${workspaceId} not found or inactive`);
+    }
+    return new SlackClient(new WebClient(cipher.decrypt(ws.botTokenEncrypted)));
+  }
+
+  const worker = createNotificationWorker({ connection, gatewayForWorkspace });
 
   worker.on("failed", (job, err) => {
     // eslint-disable-next-line no-console
     console.error(`notification job ${job?.id} failed`, err);
   });
 
+  // Triage worker (Phase 2). Only runs the model pass when an API key is
+  // configured; without one there's no classifier, so we don't drain the queue.
+  let triageWorker: import("bullmq").Worker | undefined;
+  if (config.anthropicApiKey) {
+    const triageModel = createTriageModel({
+      apiKey: config.anthropicApiKey,
+      onUsage: (u) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `💬 triage cost ws=${u.workspaceId} model=${u.model} in=${u.inputTokens} out=${u.outputTokens}`,
+        );
+      },
+    });
+    triageWorker = createTriageWorker({
+      connection,
+      model: triageModel,
+      modelName: triageModel.model,
+      store: createPrismaTriageStore(prisma),
+      gatewayForWorkspace,
+      async loadItem(itemId) {
+        const it = await prisma.item.findUnique({ where: { id: itemId }, include: { flaggedBy: true } });
+        if (!it) return null;
+        return {
+          id: it.id,
+          workspaceId: it.workspaceId,
+          messageText: it.messageText,
+          permalink: it.permalink,
+          flaggedBySlackId: it.flaggedBy?.slackUserId ?? null,
+        };
+      },
+    });
+    triageWorker.on("failed", (job, err) => {
+      // eslint-disable-next-line no-console
+      console.error(`triage job ${job?.id} failed`, err);
+    });
+  }
+
   const shutdown = async () => {
     await worker.close();
+    if (triageWorker) await triageWorker.close();
     await connection.quit();
     await prisma.$disconnect();
     process.exit(0);
@@ -78,7 +121,9 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
 
   // eslint-disable-next-line no-console
-  console.log(`⚙️  notificationWorker listening on "${NOTIFICATION_QUEUE_NAME}"`);
+  console.log(
+    `⚙️  worker listening on "${NOTIFICATION_QUEUE_NAME}"${triageWorker ? ` + "${TRIAGE_QUEUE_NAME}"` : ""}`,
+  );
 }
 
 // Only boot the worker when executed as a process, not when imported by a test.

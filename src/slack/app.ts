@@ -19,6 +19,7 @@ import { createPrismaWorkspaceStore } from "../db/workspaceStore";
 import { createPrismaAssistantStore } from "../db/assistantStore";
 import { createItemService } from "../services/itemService";
 import { createNotificationQueue } from "../jobs/bullNotificationQueue";
+import { createTriageQueue, type TriageQueue } from "../jobs/bullTriageQueue";
 import { createRedisConnection } from "../jobs/connection";
 import { createAssistantService, createCannedResponder } from "../services/assistantService";
 import { createAnthropicResponder } from "../services/anthropicResponder";
@@ -68,6 +69,26 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
   // is retried by the worker rather than silently dropped (the classic app's
   // biggest structural gap). The queue opens its own Redis connection lazily.
   const notifier = createNotificationQueue(createRedisConnection(config.redisUrl));
+
+  // Phase 2: enqueue an AI-triage job per newly-added item. Only when an API key
+  // is configured (else there's no classifier and AI features are simply off, so
+  // the classic queue works standalone). The 3-second ack window can't include an
+  // LLM call, so this is fire-and-forget onto the queue after the item is created.
+  const triageQueue: TriageQueue | null = config.anthropicApiKey
+    ? createTriageQueue(createRedisConnection(config.redisUrl))
+    : null;
+
+  // Best-effort enqueue: a triage that never runs must not break the add itself,
+  // so a Redis hiccup here is logged and swallowed rather than surfaced to Slack.
+  async function enqueueTriage(workspaceId: string, itemId: string): Promise<void> {
+    if (!triageQueue) return;
+    try {
+      await triageQueue.enqueueItem(workspaceId, itemId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`failed to enqueue triage for item ${itemId}`, err);
+    }
+  }
 
   const app = new App({
     signingSecret: config.slack.signingSecret,
@@ -159,6 +180,8 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       flagger.id,
     );
 
+    if (!result.wasDuplicate) await enqueueTriage(workspace.id, result.item.id);
+
     const confirm = result.wasDuplicate
       ? "That message is already in your review queue."
       : result.wasReopened
@@ -234,6 +257,7 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
         return;
       }
       const result = await items.createItem(channel, source, flagger.id);
+      if (!result.wasDuplicate) await enqueueTriage(workspace.id, result.item.id);
       await reply(client, ctx, {
         text: result.wasDuplicate
           ? "That message is already in your review queue."

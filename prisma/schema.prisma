@@ -1,8 +1,9 @@
-// Reviewed v2 — Phase 1 schema.
+// Reviewed v2 — schema.
 // Core queue tables (Workspace/AppUser/Channel/Item) plus the minimal state
 // the Assistant-thread skeleton needs to remember a conversation across turns.
-// AI-feature tables (ItemSummary, ItemClarificationRequest, AssigneeSuggestion,
-// DuplicateCandidate, ItemEmbedding, DigestRun) land in Phase 2/3, not here.
+// Phase 2 adds the AI-triage tables (ItemSummary, ItemClarificationRequest).
+// Later AI-feature tables (DuplicateCandidate, ItemEmbedding, DigestRun) land in
+// Phase 3, not here.
 
 generator client {
   provider = "prisma-client-js"
@@ -107,6 +108,12 @@ model Item {
   flaggedBy    AppUser  @relation("FlaggedByUser", fields: [flaggedByUserId], references: [id])
   completedBy  AppUser? @relation("CompletedByUser", fields: [completedByUserId], references: [id])
 
+  // Phase 2 AI-triage outputs — each item has at most one of each, produced by a
+  // background job after the item is added (never inline; the add path can't wait
+  // on an LLM call). Both are optional: triage may skip trivial items or fail.
+  summary       ItemSummary?
+  clarification ItemClarificationRequest?
+
   @@unique([channelId, slackMessageTs])
   @@index([channelId, status])
   @@index([workspaceId, status])
@@ -157,4 +164,49 @@ model AssistantMessage {
 enum AssistantMessageRole {
   user
   assistant
+}
+
+// --- Phase 2 AI-triage state ---------------------------------------------------
+// The add path acks Slack in well under 3 seconds and can never include a live
+// LLM call, so triage (summarize + vague-detection) runs in a background job and
+// writes its results here. Both tables are keyed 1:1 to an Item via a @unique
+// itemId so re-triaging upserts rather than accumulating rows. `model` records
+// which Claude model produced the row, so prompt/model drift is debuggable and a
+// stale summary can be regenerated when the model changes.
+
+model ItemSummary {
+  id        String   @id @default(cuid())
+  itemId    String   @unique
+  summary   String
+  model     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("item_summaries")
+}
+
+// The AI successor to the classic app's long-dead `Item.vague` boolean: instead
+// of a flag, a flagged item the model judges unclear gets a concrete clarifying
+// question the assistant can ask. `status` tracks whether the asker has since
+// resolved or dismissed it, so we don't re-ask.
+model ItemClarificationRequest {
+  id        String              @id @default(cuid())
+  itemId    String              @unique
+  question  String
+  status    ClarificationStatus @default(open)
+  model     String
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("item_clarification_requests")
+}
+
+enum ClarificationStatus {
+  open
+  resolved
+  dismissed
 }

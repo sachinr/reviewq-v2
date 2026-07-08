@@ -4,7 +4,7 @@
 // calls onto Prisma queries, so it stays deliberately thin.
 
 import type { Item, PrismaClient } from "@prisma/client";
-import type { CreateItemData, ItemRepository } from "../services/ports";
+import type { CreateItemData, ItemRepository, ItemTriageRow } from "../services/ports";
 
 export function createPrismaItemRepository(prisma: PrismaClient): ItemRepository {
   return {
@@ -68,6 +68,43 @@ export function createPrismaItemRepository(prisma: PrismaClient): ItemRepository
       const groups = await prisma.item.groupBy({
         by: ["channelId"],
         where: { channelId: { in: channelIds }, status: "open" },
+        _count: { _all: true },
+      });
+      return groups.map((g) => ({ channelId: g.channelId, count: g._count._all }));
+    },
+
+    async findTriageByItemIds(itemIds: string[]): Promise<ItemTriageRow[]> {
+      if (itemIds.length === 0) return [];
+      const rows = await prisma.item.findMany({
+        where: {
+          id: { in: itemIds },
+          OR: [{ summary: { isNot: null } }, { clarification: { isNot: null } }],
+        },
+        select: {
+          id: true,
+          summary: { select: { summary: true } },
+          clarification: { select: { question: true, status: true } },
+        },
+      });
+      return rows.map((r) => ({
+        itemId: r.id,
+        summary: r.summary?.summary ?? null,
+        clarificationQuestion: r.clarification?.question ?? null,
+        clarificationStatus: r.clarification?.status ?? null,
+      }));
+    },
+
+    async countOpenClarificationsByChannelIds(
+      channelIds: string[],
+    ): Promise<Array<{ channelId: string; count: number }>> {
+      if (channelIds.length === 0) return [];
+      const groups = await prisma.item.groupBy({
+        by: ["channelId"],
+        where: {
+          channelId: { in: channelIds },
+          status: "open",
+          clarification: { is: { status: "open" } },
+        },
         _count: { _all: true },
       });
       return groups.map((g) => ({ channelId: g.channelId, count: g._count._all }));

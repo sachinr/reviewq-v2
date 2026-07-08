@@ -70,6 +70,29 @@ describe("renderQueue", () => {
     expect(sections(p3.blocks).filter((s) => s.accessory)).toHaveLength(1);
   });
 
+  it("renders a triage summary and an open clarification under the item", () => {
+    const item = makeItem({ id: "it_ann", status: "open" });
+    const { blocks } = renderQueue({
+      items: [item],
+      annotations: {
+        it_ann: { summary: "Vendor MSA needs legal sign-off", clarificationQuestion: "Which vendor?" },
+      },
+    });
+
+    const context = blocks.find((b) => b.type === "context") as any;
+    expect(context).toBeDefined();
+    const text = context.elements[0].text;
+    expect(text).toContain("Vendor MSA needs legal sign-off");
+    expect(text).toContain("Needs clarification:");
+    expect(text).toContain("Which vendor?");
+  });
+
+  it("adds no context block for an item without annotations", () => {
+    const item = makeItem({ id: "it_plain", status: "open" });
+    const { blocks } = renderQueue({ items: [item], annotations: { other: { summary: "x" } } });
+    expect(blocks.some((b) => b.type === "context")).toBe(false);
+  });
+
   it("clamps an out-of-range page into bounds", () => {
     const items = Array.from({ length: 3 }, (_, i) => makeItem({ id: `it_${i}`, status: "open" }));
     const { page, totalPages } = renderQueue({ items, page: 99 });

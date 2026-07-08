@@ -128,6 +128,59 @@ describeIf("Prisma adapters (integration, DATABASE_URL)", () => {
       const counts = await repo.countOpenByChannelIds([channel.id]);
       expect(counts).toEqual([{ channelId: channel.id, count: 1 }]);
     });
+
+    it("joins triage annotations and counts open clarifications per channel", async () => {
+      const store = createPrismaWorkspaceStore(prisma);
+      const repo = createPrismaItemRepository(prisma);
+      const triage = createPrismaTriageStore(prisma);
+
+      const channel = await store.upsertChannel({
+        workspaceId,
+        slackChannelId: "C_ANNOT",
+        name: "annot",
+        type: "channel",
+        isBotMember: true,
+        isPrivate: false,
+      });
+      const flagger = await store.upsertUser({ workspaceId, slackUserId: "U_ANNOT" });
+      const mk = (ts: string) =>
+        repo.create({
+          workspaceId,
+          channelId: channel.id,
+          slackMessageTs: ts,
+          slackThreadTs: null,
+          messageText: "content",
+          permalink: null,
+          filesJson: null,
+          authorSlackId: "U_AUTHOR",
+          authorUserId: null,
+          flaggedByUserId: flagger.id,
+        });
+
+      const summarized = await mk("1700000003.000001");
+      const clarified = await mk("1700000003.000002");
+      const resolved = await mk("1700000003.000003");
+      const plain = await mk("1700000003.000004");
+
+      await triage.saveSummary(summarized.id, "One-line summary of the item.", "claude-haiku-4-5");
+      await triage.saveClarification(clarified.id, "Which vendor?", "claude-haiku-4-5");
+      await triage.saveClarification(resolved.id, "Answered?", "claude-haiku-4-5");
+      await prisma.itemClarificationRequest.update({
+        where: { itemId: resolved.id },
+        data: { status: "resolved" },
+      });
+
+      const rows = await repo.findTriageByItemIds([summarized.id, clarified.id, plain.id]);
+      const byItem = Object.fromEntries(rows.map((r) => [r.itemId, r]));
+      expect(byItem[summarized.id].summary).toBe("One-line summary of the item.");
+      expect(byItem[clarified.id].clarificationQuestion).toBe("Which vendor?");
+      expect(byItem[clarified.id].clarificationStatus).toBe("open");
+      expect(byItem[plain.id]).toBeUndefined(); // no triage rows → not returned
+
+      // Only the still-open clarification (clarified) counts; resolved is excluded.
+      const counts = await repo.countOpenClarificationsByChannelIds([channel.id]);
+      expect(counts).toEqual([{ channelId: channel.id, count: 1 }]);
+    });
   });
 
   describe("AssistantStore", () => {

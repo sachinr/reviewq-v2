@@ -28,6 +28,28 @@ describe("homeView", () => {
     expect(text).not.toContain("<#C_EMPTY>");
   });
 
+  it("flags how many open items in a channel still need clarification", () => {
+    const { blocks } = homeView("Reviewed", {
+      kind: "channels",
+      channels: [
+        { slackChannelId: "C_LEGAL", name: "legal", openCount: 4, clarificationCount: 2 },
+        { slackChannelId: "C_CLEAR", name: "clear", openCount: 3, clarificationCount: 0 },
+      ],
+    });
+    const text = JSON.stringify(blocks);
+    expect(text).toContain("2 need clarification");
+    // A channel with no clarifications shows just its open count, no suffix.
+    expect(text).not.toContain("0 need");
+  });
+
+  it("uses the singular for a single item needing clarification", () => {
+    const { blocks } = homeView("Reviewed", {
+      kind: "channels",
+      channels: [{ slackChannelId: "C_ONE", name: "one", openCount: 2, clarificationCount: 1 }],
+    });
+    expect(JSON.stringify(blocks)).toContain("1 needs clarification");
+  });
+
   it("shows an all-clear message when no channel has open items", () => {
     const { blocks } = homeView("Reviewed", {
       kind: "channels",

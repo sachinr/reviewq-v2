@@ -3,11 +3,12 @@
 // The Prisma-backed and WebClient-backed real adapters have their own
 // integration tests (gated on DATABASE_URL / run in CI).
 
-import type { Item, ItemStatus } from "@prisma/client";
+import type { ClarificationStatus, Item, ItemStatus } from "@prisma/client";
 import type {
   CreateItemData,
   FetchedMessage,
   ItemRepository,
+  ItemTriageRow,
   SlackGateway,
 } from "../src/services/ports";
 
@@ -46,11 +47,27 @@ export function makeItem(overrides: Partial<Item> = {}): Item {
   };
 }
 
+interface FakeTriage {
+  summary: string | null;
+  clarificationQuestion: string | null;
+  clarificationStatus: ClarificationStatus | null;
+}
+
 export class FakeItemRepository implements ItemRepository {
   public items = new Map<string, Item>();
+  public triage = new Map<string, FakeTriage>();
 
   seed(...items: Item[]): void {
     for (const it of items) this.items.set(it.id, it);
+  }
+
+  /** Attach triage output to an already-seeded item id, for renderer/App-Home tests. */
+  seedTriage(itemId: string, triage: Partial<FakeTriage>): void {
+    this.triage.set(itemId, {
+      summary: triage.summary ?? null,
+      clarificationQuestion: triage.clarificationQuestion ?? null,
+      clarificationStatus: triage.clarificationStatus ?? null,
+    });
   }
 
   async findByChannelAndTs(channelId: string, slackMessageTs: string): Promise<Item | null> {
@@ -124,6 +141,37 @@ export class FakeItemRepository implements ItemRepository {
     const counts = new Map<string, number>();
     for (const it of this.items.values()) {
       if (it.status === "open" && wanted.has(it.channelId)) {
+        counts.set(it.channelId, (counts.get(it.channelId) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()].map(([channelId, count]) => ({ channelId, count }));
+  }
+
+  async findTriageByItemIds(itemIds: string[]): Promise<ItemTriageRow[]> {
+    const rows: ItemTriageRow[] = [];
+    for (const id of itemIds) {
+      const t = this.triage.get(id);
+      if (!t) continue;
+      if (t.summary == null && t.clarificationQuestion == null) continue;
+      rows.push({
+        itemId: id,
+        summary: t.summary,
+        clarificationQuestion: t.clarificationQuestion,
+        clarificationStatus: t.clarificationStatus,
+      });
+    }
+    return rows;
+  }
+
+  async countOpenClarificationsByChannelIds(
+    channelIds: string[],
+  ): Promise<Array<{ channelId: string; count: number }>> {
+    const wanted = new Set(channelIds);
+    const counts = new Map<string, number>();
+    for (const it of this.items.values()) {
+      if (it.status !== "open" || !wanted.has(it.channelId)) continue;
+      const t = this.triage.get(it.id);
+      if (t?.clarificationStatus === "open") {
         counts.set(it.channelId, (counts.get(it.channelId) ?? 0) + 1);
       }
     }

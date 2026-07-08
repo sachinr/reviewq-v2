@@ -4,7 +4,7 @@
 // interfaces, which is what lets its business logic be unit-tested against
 // in-memory fakes with no database, Redis, or live Slack connection.
 
-import type { ChannelType, Item } from "@prisma/client";
+import type { ChannelType, ClarificationStatus, Item } from "@prisma/client";
 
 export const UNDO_WINDOW_MS = 60_000; // 1 minute — matches the classic app's undo grace period
 
@@ -34,6 +34,18 @@ export interface CreateItemData extends SourceMessage {
   permalink?: string | null;
 }
 
+/**
+ * The AI-triage outputs attached to one item, joined from ItemSummary /
+ * ItemClarificationRequest. `clarificationStatus` is carried raw so the service —
+ * not the repo — owns the rule that only a still-*open* clarification is surfaced.
+ */
+export interface ItemTriageRow {
+  itemId: string;
+  summary: string | null;
+  clarificationQuestion: string | null;
+  clarificationStatus: ClarificationStatus | null;
+}
+
 export interface ItemRepository {
   findByChannelAndTs(channelId: string, slackMessageTs: string): Promise<Item | null>;
   findById(id: string): Promise<Item | null>;
@@ -44,6 +56,19 @@ export interface ItemRepository {
   findRecentlyClosedByChannel(channelId: string, since: Date): Promise<Item[]>;
   /** Count open items grouped by channel, for the App Home overview. */
   countOpenByChannelIds(channelIds: string[]): Promise<Array<{ channelId: string; count: number }>>;
+  /**
+   * Triage annotations for a set of items (only those that have a summary and/or
+   * clarification are returned). Used to render summaries/clarifications under the
+   * queue rows.
+   */
+  findTriageByItemIds(itemIds: string[]): Promise<ItemTriageRow[]>;
+  /**
+   * Count *open* items that still have an *open* clarification request, grouped by
+   * channel, for the App Home "needs clarification" signal.
+   */
+  countOpenClarificationsByChannelIds(
+    channelIds: string[],
+  ): Promise<Array<{ channelId: string; count: number }>>;
 }
 
 /** A single fetched Slack message, normalized for the add-the-parent flow. */

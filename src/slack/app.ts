@@ -123,8 +123,8 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     if (!workspace) return;
 
     const channel = await resolver.resolveChannel(workspace, command.channel_id);
-    const { all } = await items.openAndRecentlyClosedItems(channel, new Date());
-    const { blocks } = renderQueue({ items: all, channelName: command.channel_name });
+    const { all, annotations } = await items.openAndRecentlyClosedItems(channel, new Date());
+    const { blocks } = renderQueue({ items: all, channelName: command.channel_name, annotations });
 
     const finalBlocks = channel.isBotMember || channel.type === "im"
       ? blocks
@@ -229,8 +229,8 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     }
 
     if (cmd.kind === "list") {
-      const { all } = await items.openAndRecentlyClosedItems(channel, now);
-      const { blocks } = renderQueue({ items: all });
+      const { all, annotations } = await items.openAndRecentlyClosedItems(channel, now);
+      const { blocks } = renderQueue({ items: all, annotations });
       await reply(client, ctx, { text: "Your review queue", blocks });
       return;
     }
@@ -437,8 +437,8 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
 
     await mutate({ items, resolver, channel, workspace, actorSlackId });
 
-    const { all } = await items.openAndRecentlyClosedItems(channel, new Date());
-    const { blocks } = renderQueue({ items: all, page });
+    const { all, annotations } = await items.openAndRecentlyClosedItems(channel, new Date());
+    const { blocks } = renderQueue({ items: all, page, annotations });
     await respond({ blocks, replace_original: true, text: "Your review queue" });
   }
 
@@ -489,12 +489,18 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     const channels = (await workspaceStore.listChannels(workspace.id)).filter((c) =>
       memberIds.has(c.slackChannelId),
     );
-    const counts = await items.openCountsByChannels(channels.map((c) => c.id));
+    const channelIds = channels.map((c) => c.id);
+    const [counts, clarifyCounts] = await Promise.all([
+      items.openCountsByChannels(channelIds),
+      items.openClarificationCountsByChannels(channelIds),
+    ]);
     const countById = new Map(counts.map((x) => [x.channelId, x.count]));
+    const clarifyById = new Map(clarifyCounts.map((x) => [x.channelId, x.count]));
     const summaries = channels.map((c) => ({
       slackChannelId: c.slackChannelId,
       name: c.name,
       openCount: countById.get(c.id) ?? 0,
+      clarificationCount: clarifyById.get(c.id) ?? 0,
     }));
     await publish(homeView(config.appName, { kind: "channels", channels: summaries }));
   });

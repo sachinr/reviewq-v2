@@ -70,6 +70,8 @@ export interface HomeChannelSummary {
   slackChannelId: string;
   name: string | null;
   openCount: number;
+  /** How many of the open items still have an unanswered clarifying question. */
+  clarificationCount?: number;
 }
 
 /**
@@ -130,13 +132,18 @@ export function homeView(appName: string, state: HomeState): {
             text: { type: "mrkdwn", text: ":sparkles: Your channels have no open review items. All clear!" },
           },
         ]
-      : withOpen.map((c) => ({
-          type: "section" as const,
-          text: {
-            type: "mrkdwn" as const,
-            text: `*<#${c.slackChannelId}>* — ${c.openCount} open item${c.openCount === 1 ? "" : "s"}`,
-          },
-        }));
+      : withOpen.map((c) => {
+          const needsClarify = c.clarificationCount ?? 0;
+          const clarifySuffix =
+            needsClarify > 0 ? ` · :grey_question: ${needsClarify} need${needsClarify === 1 ? "s" : ""} clarification` : "";
+          return {
+            type: "section" as const,
+            text: {
+              type: "mrkdwn" as const,
+              text: `*<#${c.slackChannelId}>* — ${c.openCount} open item${c.openCount === 1 ? "" : "s"}${clarifySuffix}`,
+            },
+          };
+        });
 
   return {
     type: "home",

@@ -13,12 +13,25 @@ export const ACTION_COMPLETE_ITEM = "complete_item";
 export const ACTION_UNDO_ITEM = "undo_item";
 export const ACTION_QUEUE_PAGE = "queue_page";
 
+/**
+ * Per-item AI-triage output surfaced beneath a queue row. Structural (not the
+ * Prisma row) so the pure renderer stays free of DB types — itemService produces
+ * a compatible shape. Both fields optional/nullable: triage may skip an item,
+ * produce only a summary, or leave a since-resolved clarification off entirely.
+ */
+export interface ItemAnnotation {
+  summary?: string | null;
+  clarificationQuestion?: string | null;
+}
+
 export interface RenderQueueInput {
   /** The combined open + recently-closed "all" list from itemService. */
   items: Item[];
   /** 1-based page number; clamped into range. Defaults to 1. */
   page?: number;
   channelName?: string | null;
+  /** AI-triage annotations keyed by item id; only the current page's are read. */
+  annotations?: Record<string, ItemAnnotation>;
 }
 
 export interface RenderedQueue {
@@ -27,7 +40,7 @@ export interface RenderedQueue {
   page: number;
 }
 
-export function renderQueue({ items, page = 1, channelName }: RenderQueueInput): RenderedQueue {
+export function renderQueue({ items, page = 1, channelName, annotations }: RenderQueueInput): RenderedQueue {
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const current = clamp(page, 1, totalPages);
 
@@ -49,6 +62,8 @@ export function renderQueue({ items, page = 1, channelName }: RenderQueueInput):
 
   for (const item of pageItems) {
     blocks.push(itemSection(item));
+    const context = annotationContext(annotations?.[item.id]);
+    if (context) blocks.push(context);
   }
 
   if (totalPages > 1) {
@@ -77,6 +92,22 @@ function itemSection(item: Item): KnownBlock {
     text: { type: "mrkdwn", text },
     accessory,
   };
+}
+
+/**
+ * A context block rendered under an item carrying its triage output: the LLM
+ * summary and, only while still open, the clarifying question. Returns null when
+ * there is nothing to show, so a plain (un-triaged) item renders exactly as before.
+ */
+function annotationContext(ann?: ItemAnnotation): KnownBlock | null {
+  if (!ann) return null;
+  const parts: string[] = [];
+  const summary = ann.summary?.trim();
+  if (summary) parts.push(`:memo: ${summary}`);
+  const question = ann.clarificationQuestion?.trim();
+  if (question) parts.push(`:grey_question: *Needs clarification:* ${question}`);
+  if (parts.length === 0) return null;
+  return { type: "context", elements: [{ type: "mrkdwn", text: parts.join("\n") }] };
 }
 
 function paginationControls(current: number, totalPages: number): KnownBlock {

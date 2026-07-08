@@ -53,10 +53,23 @@ export interface UndoResult {
   withinWindow: boolean;
 }
 
+/**
+ * Render-facing triage annotation for one item. `clarificationQuestion` is only
+ * populated while the request is still open — the service, not the renderer,
+ * enforces "don't nag once resolved/dismissed". Structurally compatible with the
+ * queueRenderer's `ItemAnnotation`.
+ */
+export interface QueueAnnotation {
+  summary: string | null;
+  clarificationQuestion: string | null;
+}
+
 export interface QueueView {
   open: Item[];
   recentlyClosed: Item[];
   all: Item[];
+  /** AI-triage annotations keyed by item id (only items that have any). */
+  annotations: Record<string, QueueAnnotation>;
 }
 
 export interface ItemServiceDeps {
@@ -184,12 +197,34 @@ export function createItemService({ repo, slack, notifier }: ItemServiceDeps) {
     return repo.countOpenByChannelIds(channelIds);
   }
 
+  /**
+   * Per-channel count of open items that still carry an open clarification
+   * request, for the App Home "needs clarification" signal. Channels with none are
+   * absent (callers default to 0).
+   */
+  async function openClarificationCountsByChannels(
+    channelIds: string[],
+  ): Promise<Array<{ channelId: string; count: number }>> {
+    return repo.countOpenClarificationsByChannelIds(channelIds);
+  }
+
   async function openAndRecentlyClosedItems(channel: ChannelContext, now: Date): Promise<QueueView> {
     const open = await repo.findOpenByChannel(channel.id);
     const since = new Date(now.getTime() - UNDO_WINDOW_MS);
     const recentlyClosed = await repo.findRecentlyClosedByChannel(channel.id, since);
     const all = [...open, ...recentlyClosed].sort(byCreation);
-    return { open, recentlyClosed, all };
+
+    const triage = await repo.findTriageByItemIds(all.map((i) => i.id));
+    const annotations: Record<string, QueueAnnotation> = {};
+    for (const t of triage) {
+      annotations[t.itemId] = {
+        summary: t.summary,
+        // Surface the clarifying question only while it's still open; a
+        // resolved/dismissed request must not keep nagging in the list.
+        clarificationQuestion: t.clarificationStatus === "open" ? t.clarificationQuestion : null,
+      };
+    }
+    return { open, recentlyClosed, all, annotations };
   }
 
   return {
@@ -200,6 +235,7 @@ export function createItemService({ repo, slack, notifier }: ItemServiceDeps) {
     listOpenItems,
     openAndRecentlyClosedItems,
     openCountsByChannels,
+    openClarificationCountsByChannels,
   };
 }
 

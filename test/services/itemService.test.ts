@@ -293,6 +293,28 @@ describe("itemService.openCountsByChannels", () => {
   });
 });
 
+describe("itemService.openClarificationCountsByChannels", () => {
+  it("counts only open items whose clarification is still open", async () => {
+    const { repo, service } = build();
+    repo.seed(
+      makeItem({ id: "a1", channelId: "chan_1", status: "open" }),
+      makeItem({ id: "a2", channelId: "chan_1", status: "open" }),
+      makeItem({ id: "b1", channelId: "chan_2", status: "open" }),
+      makeItem({ id: "b2", channelId: "chan_2", status: "complete", completedAt: NOW }),
+    );
+    repo.seedTriage("a1", { clarificationQuestion: "Which vendor?", clarificationStatus: "open" });
+    repo.seedTriage("a2", { clarificationQuestion: "Already answered?", clarificationStatus: "resolved" });
+    repo.seedTriage("b1", { clarificationQuestion: "What scope?", clarificationStatus: "open" });
+    // b2 has an open clarification but the item itself is complete → not counted.
+    repo.seedTriage("b2", { clarificationQuestion: "Stale?", clarificationStatus: "open" });
+
+    const counts = await service.openClarificationCountsByChannels(["chan_1", "chan_2"]);
+    const byId = Object.fromEntries(counts.map((c) => [c.channelId, c.count]));
+
+    expect(byId).toEqual({ chan_1: 1, chan_2: 1 });
+  });
+});
+
 describe("itemService.openAndRecentlyClosedItems", () => {
   it("returns open items plus items closed within the undo window, sorted by creation", async () => {
     const { repo, service } = build();
@@ -309,5 +331,27 @@ describe("itemService.openAndRecentlyClosedItems", () => {
     expect(view.open.map((i) => i.id)).toEqual(["item_a"]);
     expect(view.recentlyClosed.map((i) => i.id)).toEqual(["item_b"]);
     expect(view.all.map((i) => i.id)).toEqual(["item_a", "item_b"]);
+  });
+
+  it("attaches triage annotations, surfacing a clarification only while it's open", async () => {
+    const { repo, service } = build();
+    repo.seed(
+      makeItem({ id: "item_a", channelId: "chan_1", status: "open" }),
+      makeItem({ id: "item_b", channelId: "chan_1", status: "open" }),
+      makeItem({ id: "item_c", channelId: "chan_1", status: "open" }),
+    );
+    repo.seedTriage("item_a", { summary: "Long thread about the Q3 contract" });
+    repo.seedTriage("item_b", { clarificationQuestion: "Which contract?", clarificationStatus: "open" });
+    repo.seedTriage("item_c", { clarificationQuestion: "Answered already", clarificationStatus: "resolved" });
+
+    const view = await service.openAndRecentlyClosedItems(channel, NOW);
+
+    expect(view.annotations.item_a).toEqual({
+      summary: "Long thread about the Q3 contract",
+      clarificationQuestion: null,
+    });
+    expect(view.annotations.item_b.clarificationQuestion).toBe("Which contract?");
+    // A resolved clarification is not re-surfaced in the list.
+    expect(view.annotations.item_c.clarificationQuestion).toBeNull();
   });
 });

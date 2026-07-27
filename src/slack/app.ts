@@ -24,18 +24,30 @@ import { createRedisConnection } from "../jobs/connection";
 import { createAssistantService, createCannedResponder } from "../services/assistantService";
 import { createAnthropicResponder } from "../services/anthropicResponder";
 import { createAnthropicChat } from "./anthropicChat";
+import { createAnthropicToolChat } from "./anthropicToolChat";
+import {
+  createToolResponder,
+  defaultToolSystemPrompt,
+  type ToolCallingChat,
+} from "../services/toolLoop";
+import type { MutationProposal, ToolExecContext } from "../services/assistantTools";
+import type { ItemService } from "../services/itemService";
 import { createResolver } from "./resolver";
 import { SlackClient } from "./slackClient";
 import { createSlackStreamSink, type StreamingChatClient } from "./slackStreamSink";
 import { createInstallationStore } from "./installationStore";
 import { renderQueue, ACTION_COMPLETE_ITEM, ACTION_UNDO_ITEM, ACTION_QUEUE_PAGE } from "./queueRenderer";
 import { parseBotCommand } from "./messageCommands";
-import type { SourceMessage } from "../services/ports";
+import type { ChannelContext, SourceMessage } from "../services/ports";
+import type { Item } from "@prisma/client";
 import {
+  ACTION_ASSISTANT_CONFIRM,
+  ACTION_ASSISTANT_DISMISS,
   ACTION_HELP,
   helpBlocks,
   homeView,
   invitePromptBlock,
+  mutationConfirmBlocks,
   welcomeBlocks,
 } from "./blocks";
 
@@ -62,6 +74,16 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     store: createPrismaAssistantStore(prisma),
     responder,
   });
+
+  // Phase 3: the tool-calling brain. When a key is configured the assistant runs
+  // the multi-turn tool-use loop (list a channel's queue, propose completing an
+  // item) instead of the plain streaming responder; without one it stays on the
+  // canned/streaming path above. The Anthropic client is built once here; the
+  // per-request executor context (identity + channel access) is assembled in the
+  // userMessage handler.
+  const toolChat: ToolCallingChat | null = config.anthropicApiKey
+    ? createAnthropicToolChat(config.anthropicApiKey)
+    : null;
 
   const installationStore = createInstallationStore(prisma, cipher);
 
@@ -455,6 +477,55 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     });
   });
 
+  // --- Assistant mutation confirmation -----------------------------------------
+  // The trusted endpoint of the tool-calling flow: the assistant loop never
+  // mutates; it renders a confirmation card, and only a click here — carrying the
+  // real clicking user's identity — runs the mutation. The button value carries
+  // only ids we set from thread context (never model text), and we re-resolve +
+  // re-check channel ownership server-side (findItemInChannel + assertOwnership)
+  // before touching anything, so a stale or cross-channel proposal is refused.
+  app.action(ACTION_ASSISTANT_CONFIRM, async ({ ack, body, action, client, respond }) => {
+    await ack();
+    const v = parseMutationValue((action as { value?: string }).value);
+    if (!v) return;
+    const b = body as { team?: { id: string }; user?: { id: string } };
+    const teamId = b.team?.id;
+    const actorSlackId = b.user?.id;
+    if (!teamId || !actorSlackId) return;
+
+    const { resolver, items } = scopeFor(client);
+    const workspace = await resolver.resolveWorkspace(teamId);
+    if (!workspace) return;
+    const channel = await resolver.resolveChannel(workspace, v.slackChannelId);
+    const item = await items.findItemInChannel(v.itemId, channel);
+    if (!item) {
+      await respond({ replace_original: true, text: "That item is no longer available." });
+      return;
+    }
+    const actor = await resolver.resolveUser(workspace, actorSlackId);
+    try {
+      if (v.kind === "complete") {
+        await items.completeItem(item.id, channel, { userId: actor.id, slackId: actorSlackId }, new Date());
+        await respond({ replace_original: true, text: ":white_check_mark: Marked that item as done." });
+      } else {
+        const res = await items.undoComplete(item.id, channel, new Date());
+        await respond({
+          replace_original: true,
+          text: res.withinWindow
+            ? ":leftwards_arrow_with_hook: Reopened that item."
+            : "The undo window for that item has already passed.",
+        });
+      }
+    } catch {
+      await respond({ replace_original: true, text: "Sorry — I couldn't complete that action." });
+    }
+  });
+
+  app.action(ACTION_ASSISTANT_DISMISS, async ({ ack, respond }) => {
+    await ack();
+    await respond({ replace_original: true, text: "Okay — I won't make that change." });
+  });
+
   // --- App Home ----------------------------------------------------------------
   // Shows each channel the *viewing* user belongs to with its open-item count.
   // Membership is read from the user's own token (conversations.list), so the
@@ -548,9 +619,12 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     await recordUninstall(context);
   });
 
-  // --- Assistant surface (Phase 1 skeleton) ------------------------------------
-  // Persists every turn so context survives across messages/restarts; replies via
-  // the injected Responder (canned now, Anthropic-backed in Phase 2).
+  // --- Assistant surface -------------------------------------------------------
+  // Persists every turn so context survives across messages/restarts. The reply is
+  // produced by whichever brain is configured: the Phase 3 tool-calling loop when
+  // an API key is set (it can read a channel's queue and propose completing an item
+  // via a confirmation card), otherwise the Phase 1/2 canned/streaming responder.
+  // Either way the reply is rendered through the same live Slack stream sink.
   const assistant = new Assistant({
     threadStarted: async ({ say, saveThreadContext, setSuggestedPrompts }) => {
       await say(
@@ -570,7 +644,7 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
         // setSuggestedPrompts is best-effort; a failure here must not drop the thread.
       }
     },
-    userMessage: async ({ message, client, context, say, setStatus }) => {
+    userMessage: async ({ message, client, context, say, setStatus, getThreadContext }) => {
       const m = message as {
         text?: string;
         user?: string;
@@ -581,36 +655,75 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       const teamId = context.teamId;
       if (!teamId || !m.user || !m.channel || !m.text) return;
 
-      const { resolver } = scopeFor(client);
+      const { resolver, items } = scopeFor(client);
       const workspace = await resolver.resolveWorkspace(teamId);
       if (!workspace) return;
       const appUser = await resolver.resolveUser(workspace, m.user);
 
       await setStatus("is thinking…");
 
-      // Stream the reply into the thread live via chat.startStream/appendStream/
-      // stopStream, so tokens render incrementally and rate-safely instead of
-      // landing as one delayed block. The assembled reply is still persisted.
       const threadTs = m.thread_ts ?? m.ts ?? "";
+      const input = {
+        workspaceId: workspace.id,
+        appUserId: appUser.id,
+        slackChannelId: m.channel,
+        slackThreadTs: threadTs,
+      };
+
+      // Where the reply is rendered: the same live Slack stream sink both paths
+      // use, so the final text always arrives via chat.startStream/appendStream/
+      // stopStream (rate-safe) rather than one delayed block.
       const sink = createSlackStreamSink(client as StreamingChatClient, {
         channel: m.channel,
         threadTs,
       });
+
       try {
-        const { reply } = await assistantSvc.handleUserMessageStreaming(
-          {
+        if (toolChat) {
+          // --- Tool-calling path -------------------------------------------------
+          // Scope the assistant's reads to the channel this thread is *about* (the
+          // one the user opened it from). That single membership fact — the user is
+          // demonstrably in the channel they invoked the assistant from — is the
+          // authorization boundary here, so we don't need a per-turn user-token
+          // round-trip: any other channel is simply not accessible to the executor.
+          const threadCtx = await safeGetThreadContext(getThreadContext);
+          const contextChannelId = threadCtx?.channel_id;
+          const contextChannel = contextChannelId
+            ? await resolver.resolveChannel(workspace, contextChannelId)
+            : null;
+
+          const execCtx: ToolExecContext = {
             workspaceId: workspace.id,
-            appUserId: appUser.id,
-            slackChannelId: m.channel,
-            slackThreadTs: threadTs,
-          },
-          m.text,
-          new Date(),
-          sink,
-        );
-        // If the model produced nothing, the stream never opened — fall back to a
-        // plain post so the user still sees a reply.
-        if (!sink.started) await say(reply);
+            requestingSlackId: m.user,
+            canAccessChannel: (id) => id === contextChannelId,
+            resolveChannel: async (id) => (id === contextChannelId ? contextChannel : null),
+            items,
+          };
+          const system = defaultToolSystemPrompt(config.appName, { currentChannelId: contextChannelId });
+          const responder = createToolResponder(toolChat, execCtx, system);
+
+          const { reply, proposals } = await assistantSvc.handleUserMessageWithTools(
+            input,
+            m.text,
+            new Date(),
+            responder,
+          );
+          await renderReply(sink, say, reply);
+
+          // Turn each deferred mutation into a trusted confirmation card — but only
+          // for an item that really belongs to the in-context channel and is in the
+          // right state. A fabricated/cross-channel itemId (e.g. from injected
+          // content) resolves to nothing here and silently produces no card.
+          if (contextChannel) {
+            for (const p of proposals) {
+              await maybePostConfirmation(say, items, contextChannel, p);
+            }
+          }
+        } else {
+          // --- Canned / plain-streaming path (no API key) ------------------------
+          const { reply } = await assistantSvc.handleUserMessageStreaming(input, m.text, new Date(), sink);
+          if (!sink.started) await say(reply);
+        }
       } finally {
         // Idempotent: closes a half-open stream if generation threw mid-flight.
         await sink.stop();
@@ -644,6 +757,97 @@ async function listUserMemberChannelIds(userToken: string): Promise<Set<string>>
     cursor = res.response_metadata?.next_cursor || undefined;
   } while (cursor);
   return ids;
+}
+
+/** A minimal say() shape — enough to post text and optional blocks into the thread. */
+type SayLike = (msg: { text: string; blocks?: unknown[] }) => Promise<unknown>;
+
+/** Read the assistant thread's saved context, tolerating an absent/erroring util. */
+async function safeGetThreadContext(
+  getThreadContext?: () => Promise<{ channel_id?: string } | undefined>,
+): Promise<{ channel_id?: string } | undefined> {
+  if (!getThreadContext) return undefined;
+  try {
+    return await getThreadContext();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Render an assembled reply through the live stream sink (single append + stop),
+ * falling back to a plain post if nothing streamed (e.g. an empty reply so the
+ * stream never opened) so the user always sees something.
+ */
+async function renderReply(
+  sink: { append(text: string): Promise<void>; stop(): Promise<void>; readonly started: boolean },
+  say: SayLike,
+  reply: string,
+): Promise<void> {
+  if (reply.length > 0) await sink.append(reply);
+  await sink.stop();
+  if (!sink.started) await say({ text: reply });
+}
+
+/**
+ * Post a confirmation card for a deferred mutation — but only when the proposal
+ * points at a real item in the in-context channel that is in the right state for
+ * the action. A fabricated or cross-channel itemId (possibly injected via message
+ * content) resolves to nothing and produces no card at all.
+ */
+async function maybePostConfirmation(
+  say: SayLike,
+  items: Pick<ItemService, "findItemInChannel">,
+  channel: ChannelContext,
+  proposal: MutationProposal,
+): Promise<void> {
+  const itemId = typeof proposal.input.itemId === "string" ? proposal.input.itemId : null;
+  if (!itemId) return;
+  const item = await items.findItemInChannel(itemId, channel);
+  if (!item) return;
+
+  const kind = proposal.toolName === "complete_item" ? "complete" : "undo";
+  if (kind === "complete" && item.status !== "open") return; // already done
+  if (kind === "undo" && item.status !== "complete") return; // nothing to reopen
+
+  await say({
+    text: kind === "complete" ? "Confirm completing this item?" : "Confirm reopening this item?",
+    blocks: mutationConfirmBlocks({
+      kind,
+      itemId: item.id,
+      slackChannelId: channel.slackChannelId,
+      label: itemLabel(item),
+    }),
+  });
+}
+
+/** A short, single-line label for an item, for the confirmation card. */
+function itemLabel(item: Item): string {
+  const text = item.messageText?.trim();
+  const label = text && text.length > 0 ? text : "(no message text)";
+  const oneLine = label.replace(/\s+/g, " ");
+  const clipped = oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
+  return item.permalink ? `<${item.permalink}|${clipped}>` : clipped;
+}
+
+/** Parse an assistant confirmation button's JSON value; null on anything malformed. */
+function parseMutationValue(
+  value?: string,
+): { kind: "complete" | "undo"; itemId: string; slackChannelId: string } | null {
+  if (!value) return null;
+  try {
+    const v = JSON.parse(value) as { kind?: unknown; itemId?: unknown; slackChannelId?: unknown };
+    if (
+      (v.kind === "complete" || v.kind === "undo") &&
+      typeof v.itemId === "string" &&
+      typeof v.slackChannelId === "string"
+    ) {
+      return { kind: v.kind, itemId: v.itemId, slackChannelId: v.slackChannelId };
+    }
+  } catch {
+    // malformed value → treat as no-op
+  }
+  return null;
 }
 
 /** Parse a pagination button's JSON value, defaulting to page 1 on anything odd. */

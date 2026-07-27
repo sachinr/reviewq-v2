@@ -59,6 +59,25 @@ export function mutationConfirmBlocks(c: MutationConfirmation): KnownBlock[] {
   ];
 }
 
+/**
+ * The scheduled staleness digest posted into a channel: a header plus the model's
+ * prose. `staleItems` drives the header count so the message reads as a nudge
+ * ("3 items have been open a while") rather than an anonymous wall of text.
+ */
+export function digestBlocks(summaryText: string, staleItems: number): KnownBlock[] {
+  const noun = staleItems === 1 ? "item has" : "items have";
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `:hourglass_flowing_sand: *Review queue digest* — ${staleItems} ${noun} been open a while:`,
+      },
+    },
+    { type: "section", text: { type: "mrkdwn", text: summaryText } },
+  ];
+}
+
 export function welcomeBlocks(): KnownBlock[] {
   return [
     {

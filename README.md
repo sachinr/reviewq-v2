@@ -154,10 +154,13 @@ gate on.
 
 ## Roadmap
 
-- **Phase 1** — core queue, all Slack surfaces, OAuth, assistant skeleton.
-- **Phase 2 (in progress)** — Anthropic-backed assistant reply generation
-  (`anthropicResponder` + `anthropicChat`, token-streaming via `replyStream`),
-  now wired end-to-end: `replyStream` → `streamBridge` → `slackStreamSink`
-  (chat.startStream/appendStream/stopStream) renders replies incrementally in the
-  assistant thread; next: summaries, duplicate detection, and digests (BullMQ
-  worker: `npm run start:worker`).
+- **Phase 1** — core queue, all Slack surfaces, OAuth, assistant skeleton. ✅
+- **Phase 2** — Anthropic-backed assistant replies streamed end-to-end
+  (`replyStream` → `streamBridge` → `slackStreamSink`), plus AI triage on the add
+  path (summaries + vague-item detection). ✅
+- **Phase 3** — conversational tool-using assistant (multi-turn tool-use loop +
+  guarded confirmation UI) ✅; **scheduled staleness digests** — a repeatable
+  BullMQ sweep that Claude-summarizes each channel's aging open items and posts a
+  digest (`DIGEST_CRON`, default Mondays 14:00 UTC; runs on the worker process). ✅
+- **Next** — cross-channel assistant reads, dynamic suggested prompts, semantic
+  duplicate detection (pgvector); stretch: Workflow Builder steps, MCP exposure.

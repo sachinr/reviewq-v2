@@ -1,9 +1,24 @@
 import {
   ACTION_ASSISTANT_CONFIRM,
   ACTION_ASSISTANT_DISMISS,
+  digestBlocks,
   homeView,
   mutationConfirmBlocks,
 } from "../../src/slack/blocks";
+
+describe("digestBlocks", () => {
+  it("renders the digest prose under a header that counts the stale items (pluralized)", () => {
+    const text = JSON.stringify(digestBlocks("Two contracts are stuck.", 3));
+    expect(text).toContain("Two contracts are stuck.");
+    expect(text).toContain("3 items have");
+    expect(text).toContain("digest");
+  });
+
+  it("uses singular wording for a single stale item", () => {
+    const text = JSON.stringify(digestBlocks("One thing is stuck.", 1));
+    expect(text).toContain("1 item has");
+  });
+});
 
 describe("homeView", () => {
   it("renders an auth prompt when the viewer has no user token", () => {

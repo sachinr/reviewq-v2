@@ -65,6 +65,7 @@ model Channel {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   items     Item[]
+  digests   DigestRun[]
 
   @@unique([workspaceId, slackChannelId])
   @@map("channels")
@@ -209,4 +210,26 @@ enum ClarificationStatus {
   open
   resolved
   dismissed
+}
+
+// One recorded run of the scheduled staleness digest for a channel: a BullMQ
+// repeatable job periodically asks Claude to summarize a channel's aging open
+// items and posts it. This is a history table (never 1:1 with a channel) so a
+// failed/empty run is visible and cadence/effectiveness can be reviewed — the
+// classic app had no scheduled job at all. `postedMessageTs` is null when the run
+// produced no digest (nothing stale) or the post failed.
+model DigestRun {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  channelId        String
+  itemsConsidered  Int
+  staleItems       Int
+  summaryText      String?
+  postedMessageTs  String?
+  runAt            DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, runAt])
+  @@map("digest_runs")
 }

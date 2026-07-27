@@ -211,6 +211,56 @@ export async function executeToolPlan(calls: ToolCall[], ctx: ToolExecContext): 
   return outcomes;
 }
 
+/**
+ * The read side of a ToolExecContext (canAccessChannel + resolveChannel), built
+ * for cross-channel reads. The classic Phase-3 wiring scoped the assistant to the
+ * single in-context channel; this widens it to *any channel the requesting user
+ * is really a member of* so "what's stuck in #legal" works — while keeping the
+ * authorization boundary intact:
+ *   - `contextChannelId` is always readable (the fast path that needs no user
+ *     token — the user demonstrably opened the assistant from it), served from
+ *     the pre-resolved `contextChannel`.
+ *   - `memberChannelIds` is the user's real Slack membership (sourced from their
+ *     own token, the same signal App Home uses). Only those channels are admitted.
+ *   - Anything else is refused, and `resolveChannel` never even resolves it —
+ *     defense in depth, so a resolver that *could* find an off-limits channel
+ *     still can't leak it. Admitted non-context channels are resolved once via
+ *     `resolveOther` and cached for the turn.
+ */
+export interface ChannelReadAccessDeps {
+  contextChannelId?: string | null;
+  contextChannel?: ChannelContext | null;
+  memberChannelIds?: Iterable<string>;
+  resolveOther(slackChannelId: string): Promise<ChannelContext | null>;
+}
+
+export interface ChannelReadAccess {
+  canAccessChannel(slackChannelId: string): boolean;
+  resolveChannel(slackChannelId: string): Promise<ChannelContext | null>;
+}
+
+export function createChannelReadAccess(deps: ChannelReadAccessDeps): ChannelReadAccess {
+  const contextId = deps.contextChannelId ?? null;
+  const members = new Set(deps.memberChannelIds ?? []);
+  const cache = new Map<string, ChannelContext | null>();
+  if (contextId) cache.set(contextId, deps.contextChannel ?? null);
+
+  function canAccessChannel(slackChannelId: string): boolean {
+    return slackChannelId === contextId || members.has(slackChannelId);
+  }
+
+  async function resolveChannel(slackChannelId: string): Promise<ChannelContext | null> {
+    // Never resolve outside the boundary, regardless of what resolveOther could find.
+    if (!canAccessChannel(slackChannelId)) return null;
+    if (cache.has(slackChannelId)) return cache.get(slackChannelId) ?? null;
+    const resolved = await deps.resolveOther(slackChannelId);
+    cache.set(slackChannelId, resolved);
+    return resolved;
+  }
+
+  return { canAccessChannel, resolveChannel };
+}
+
 function asString(v: unknown): string | null {
   return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 }

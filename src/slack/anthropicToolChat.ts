@@ -1,16 +1,20 @@
-// anthropicToolChat — the SDK-backed adapter for the ToolCallingChat port. Like
+// anthropicToolChat — the SDK-backed adapter for the tool-calling chat ports. Like
 // anthropicChat (the plain streaming responder's adapter) and llm/client (the
-// triage adapter), it is a thin I/O binding: it wraps one non-streaming
-// Anthropic Messages call with tools and translates between the loop's
-// provider-agnostic LoopMessage/AssistantTurn vocabulary and the SDK's block
-// shapes. The interesting control flow lives in services/toolLoop.ts; the fiddly
-// (and therefore separately unit-tested) part here is that block translation,
+// triage adapter), it is a thin I/O binding: it wraps an Anthropic Messages call
+// with tools and translates between the loop's provider-agnostic
+// LoopMessage/AssistantTurn vocabulary and the SDK's block shapes. The
+// interesting control flow lives in services/toolLoop.ts; the fiddly (and
+// therefore separately unit-tested) part here is that block translation,
 // exported as pure functions so it can be exercised without the SDK.
 //
-// Non-streaming on purpose: a tool-use turn has to be received in full before its
-// tool_use blocks can be executed, so there's nothing to stream mid-turn. The
-// assistant's "is thinking…" status covers the latency, and the final reply is
-// rendered through the existing Slack stream sink by the caller.
+// It implements BOTH ports:
+//   - runTurn (ToolCallingChat): one non-streaming call, used by the pure loop.
+//   - streamTurn (StreamingToolCallingChat): the same call as a stream, so the
+//     model's assistant text renders into Slack token-by-token via the live sink.
+// A tool-use turn is still received in full before its tool_use blocks can be
+// executed — you can't act on a tool call mid-token — so streamTurn forwards the
+// text deltas as they arrive and resolves the full turn (text + tool calls) via
+// the stream's finalMessage(); the loop runs any tool calls once that resolves.
 
 import Anthropic from "@anthropic-ai/sdk";
 import type {
@@ -19,7 +23,13 @@ import type {
   Tool,
 } from "@anthropic-ai/sdk/resources/messages";
 import type { AssistantTool } from "../services/assistantTools";
-import type { AssistantTurn, LoopMessage, ToolCallingChat } from "../services/toolLoop";
+import type {
+  AssistantTurn,
+  LoopMessage,
+  StreamedTurn,
+  StreamingToolCallingChat,
+  ToolCallingChat,
+} from "../services/toolLoop";
 
 // The conversational/tool tier — the plan's "mid tier for conversational
 // replies". Overridable via ANTHROPIC_TOOL_MODEL (falling back to the shared
@@ -32,21 +42,38 @@ const MAX_RETRIES = 2;
 export function createAnthropicToolChat(
   apiKey: string,
   model: string = process.env.ANTHROPIC_TOOL_MODEL || process.env.ANTHROPIC_MODEL || DEFAULT_TOOL_MODEL,
-): ToolCallingChat {
+): ToolCallingChat & StreamingToolCallingChat {
   const client = new Anthropic({ apiKey, maxRetries: MAX_RETRIES });
+
+  function requestBody(input: { system: string; messages: LoopMessage[]; tools: AssistantTool[] }) {
+    return {
+      model,
+      max_tokens: MAX_TOKENS,
+      system: input.system,
+      tools: input.tools.map(toAnthropicTool),
+      messages: input.messages.map(toAnthropicMessage),
+    };
+  }
+
   return {
-    async runTurn({ system, messages, tools }): Promise<AssistantTurn> {
-      const res = await client.messages.create(
-        {
-          model,
-          max_tokens: MAX_TOKENS,
-          system,
-          tools: tools.map(toAnthropicTool),
-          messages: messages.map(toAnthropicMessage),
-        },
-        { timeout: TIMEOUT_MS },
-      );
+    async runTurn(input): Promise<AssistantTurn> {
+      const res = await client.messages.create(requestBody(input), { timeout: TIMEOUT_MS });
       return toAssistantTurn(res.content as ContentBlock[]);
+    },
+
+    streamTurn(input): StreamedTurn {
+      const stream = client.messages.stream(requestBody(input), { timeout: TIMEOUT_MS });
+      async function* deltas(): AsyncIterable<string> {
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            yield event.delta.text;
+          }
+        }
+      }
+      // finalMessage() resolves once the stream (drained by the loop via deltas)
+      // completes, carrying the full block list including any tool_use blocks.
+      const turn = stream.finalMessage().then((msg) => toAssistantTurn(msg.content as ContentBlock[]));
+      return { deltas: deltas(), turn };
     },
   };
 }

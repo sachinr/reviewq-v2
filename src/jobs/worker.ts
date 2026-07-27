@@ -17,6 +17,7 @@ import type { SlackGateway } from "../services/ports";
 import { bullConnection } from "./connection";
 import { NOTIFICATION_QUEUE_NAME, runNotificationJob, type NotificationJob } from "./notificationQueue";
 import { TRIAGE_QUEUE_NAME } from "./triageQueue";
+import { DIGEST_QUEUE_NAME } from "./digestQueue";
 
 export interface NotificationWorkerDeps {
   connection: Redis;
@@ -110,9 +111,76 @@ async function main(): Promise<void> {
     });
   }
 
+  // Digest worker + repeatable sweep (Phase 3). Like triage, it needs a model, so
+  // it only runs when an API key is configured. The sweep cron is UTC and
+  // overridable; default is Mondays 14:00 UTC.
+  let digestWorker: import("bullmq").Worker | undefined;
+  let digestQueue: import("./bullDigestQueue").DigestQueue | undefined;
+  if (config.anthropicApiKey) {
+    const { createDigestModel } = await import("../llm/digestModel");
+    const { createPrismaDigestStore } = await import("../db/digestStore");
+    const { createDigestQueue } = await import("./bullDigestQueue");
+    const { createDigestWorker } = await import("./digestWorker");
+    const { digestBlocks } = await import("../slack/blocks");
+
+    const digestModel = createDigestModel({
+      apiKey: config.anthropicApiKey,
+      onUsage: (u) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `📰 digest cost ws=${u.workspaceId} model=${u.model} in=${u.inputTokens} out=${u.outputTokens}`,
+        );
+      },
+    });
+    const store = createPrismaDigestStore(prisma);
+    digestQueue = createDigestQueue(connection);
+
+    // Post the digest with a fresh per-workspace bot client; best-effort — a post
+    // failure returns null so the run is still recorded (as a miss) instead of
+    // retrying the whole model pass.
+    const postDigest = async (
+      workspaceId: string,
+      slackChannelId: string,
+      text: string,
+      staleItems: number,
+    ): Promise<string | null> => {
+      try {
+        const ws = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+        if (!ws || !ws.isActive) return null;
+        const client = new WebClient(cipher.decrypt(ws.botTokenEncrypted));
+        const res = await client.chat.postMessage({
+          channel: slackChannelId,
+          text: "Review queue digest",
+          blocks: digestBlocks(text, staleItems),
+        });
+        return (res.ts as string | undefined) ?? null;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`digest post failed ws=${workspaceId} channel=${slackChannelId}`, err);
+        return null;
+      }
+    };
+
+    digestWorker = createDigestWorker({
+      connection,
+      store,
+      model: digestModel,
+      enqueueChannel: (ref) => digestQueue!.enqueueChannel(ref),
+      postDigest,
+    });
+    digestWorker.on("failed", (job, err) => {
+      // eslint-disable-next-line no-console
+      console.error(`digest job ${job?.id} failed`, err);
+    });
+
+    await digestQueue.scheduleSweep(process.env.DIGEST_CRON ?? "0 14 * * 1");
+  }
+
   const shutdown = async () => {
     await worker.close();
     if (triageWorker) await triageWorker.close();
+    if (digestWorker) await digestWorker.close();
+    if (digestQueue) await digestQueue.close();
     await connection.quit();
     await prisma.$disconnect();
     process.exit(0);
@@ -122,7 +190,9 @@ async function main(): Promise<void> {
 
   // eslint-disable-next-line no-console
   console.log(
-    `⚙️  worker listening on "${NOTIFICATION_QUEUE_NAME}"${triageWorker ? ` + "${TRIAGE_QUEUE_NAME}"` : ""}`,
+    `⚙️  worker listening on "${NOTIFICATION_QUEUE_NAME}"` +
+      `${triageWorker ? ` + "${TRIAGE_QUEUE_NAME}"` : ""}` +
+      `${digestWorker ? ` + "${DIGEST_QUEUE_NAME}"` : ""}`,
   );
 }
 

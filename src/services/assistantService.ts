@@ -72,6 +72,18 @@ function canStream(r: Responder): r is StreamingResponderPort {
   return typeof (r as StreamingResponderPort).replyStream === "function";
 }
 
+/**
+ * A responder that can also *do* things: it returns the reply text plus any
+ * deferred mutation proposals for the caller to render as confirmation cards.
+ * Kept generic in the proposal type so this service stays decoupled from the
+ * tool-calling module (toolLoop) — the Phase 3 concrete implementation is
+ * createToolResponder there. The service only persists `text`; proposals pass
+ * through untouched for the listener to turn into trusted UI.
+ */
+export interface ToolTurnResponder<P> {
+  respond(history: TurnView[], latest: string): Promise<{ text: string; proposals: P[] }>;
+}
+
 export interface AssistantServiceDeps {
   store: AssistantStore;
   responder: Responder;
@@ -148,7 +160,33 @@ export function createAssistantService({ store, responder }: AssistantServiceDep
     return { thread, reply };
   }
 
-  return { startThread, handleUserMessage, handleUserMessageStreaming };
+  /**
+   * The tool-calling variant of handleUserMessage: persist the user turn, run the
+   * (per-request) tool responder over the windowed history, persist the assistant
+   * reply, and hand back any deferred mutation proposals for the listener to
+   * render as confirmation cards. The intra-turn model↔tool exchange is ephemeral
+   * — only the user text and the final reply become durable thread messages, so
+   * history stays clean and the next turn isn't fed raw tool blocks.
+   */
+  async function handleUserMessageWithTools<P>(
+    input: GetOrCreateThreadInput,
+    text: string,
+    now: Date,
+    responder: ToolTurnResponder<P>,
+  ): Promise<{ thread: AssistantThread; reply: string; proposals: P[] }> {
+    const thread = await store.getOrCreateThread(input);
+    await store.addMessage(thread.id, "user", text);
+
+    const history = windowHistory((await store.getMessages(thread.id)).map(toTurnView));
+    const { text: replyText, proposals } = await responder.respond(history, text);
+    const reply = replyText.trim().length > 0 ? replyText.trim() : ASSISTANT_FALLBACK_REPLY;
+
+    await store.addMessage(thread.id, "assistant", reply);
+    await store.touch(thread.id, now);
+    return { thread, reply, proposals };
+  }
+
+  return { startThread, handleUserMessage, handleUserMessageStreaming, handleUserMessageWithTools };
 }
 
 /** Wrap a delta stream so each chunk is observed (accumulated) as it passes through. */

@@ -1,4 +1,9 @@
-import { homeView } from "../../src/slack/blocks";
+import {
+  ACTION_ASSISTANT_CONFIRM,
+  ACTION_ASSISTANT_DISMISS,
+  homeView,
+  mutationConfirmBlocks,
+} from "../../src/slack/blocks";
 
 describe("homeView", () => {
   it("renders an auth prompt when the viewer has no user token", () => {
@@ -56,5 +61,34 @@ describe("homeView", () => {
       channels: [{ slackChannelId: "C_EMPTY", name: "empty", openCount: 0 }],
     });
     expect(JSON.stringify(blocks)).toMatch(/All clear/i);
+  });
+});
+
+describe("mutationConfirmBlocks", () => {
+  const base = { itemId: "i1", slackChannelId: "C_LEGAL", label: "review the NDA" };
+
+  it("renders a confirm + cancel pair whose values carry only controlled ids", () => {
+    const blocks = mutationConfirmBlocks({ kind: "complete", ...base });
+    const actions = blocks.find((b) => b.type === "actions") as { elements: Array<{ action_id: string; value: string }> };
+    expect(actions.elements.map((e) => e.action_id)).toEqual([
+      ACTION_ASSISTANT_CONFIRM,
+      ACTION_ASSISTANT_DISMISS,
+    ]);
+    // The button value is exactly the ids we control — no free-form model text.
+    expect(JSON.parse(actions.elements[0].value)).toEqual({
+      kind: "complete",
+      itemId: "i1",
+      slackChannelId: "C_LEGAL",
+    });
+    // The item label is shown so the user knows what they're confirming.
+    expect(JSON.stringify(blocks)).toContain("review the NDA");
+  });
+
+  it("uses reopen wording for an undo confirmation", () => {
+    const blocks = mutationConfirmBlocks({ kind: "undo", ...base });
+    const text = JSON.stringify(blocks);
+    expect(text.toLowerCase()).toContain("reopen");
+    const actions = blocks.find((b) => b.type === "actions") as { elements: Array<{ value: string }> };
+    expect(JSON.parse(actions.elements[0].value).kind).toBe("undo");
   });
 });

@@ -8,6 +8,57 @@ import type { KnownBlock } from "@slack/types";
 export const ACTION_HELP = "help";
 export const ACTION_VIEW_ALL = "view_all_modal";
 
+// The assistant's confirmation card: the trusted UI a proposed mutation must pass
+// through before it takes effect. The tool-use loop never executes a mutation —
+// it hands back a proposal, which becomes one of these cards; only a click here,
+// carrying the real user's identity, runs it.
+export const ACTION_ASSISTANT_CONFIRM = "assistant_confirm_mutation";
+export const ACTION_ASSISTANT_DISMISS = "assistant_dismiss_mutation";
+
+/** A mutation the assistant is asking the user to confirm. */
+export interface MutationConfirmation {
+  kind: "complete" | "undo";
+  itemId: string;
+  /** The channel the item lives in — set by us from thread context, not the model. */
+  slackChannelId: string;
+  /** A short human label for the item (its text/permalink), already resolved. */
+  label: string;
+}
+
+/**
+ * Build the confirm/dismiss card for one proposed mutation. The button `value`
+ * carries only ids we control (kind/itemId/channel) — never model-authored free
+ * text — so the action handler re-resolves and re-checks ownership server-side.
+ */
+export function mutationConfirmBlocks(c: MutationConfirmation): KnownBlock[] {
+  const verb = c.kind === "complete" ? "mark this item as done" : "reopen this item";
+  const value = JSON.stringify({ kind: c.kind, itemId: c.itemId, slackChannelId: c.slackChannelId });
+  return [
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: `Do you want me to ${verb}?\n>${c.label}` },
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: { type: "plain_text", text: c.kind === "complete" ? "Mark as Done" : "Reopen" },
+          style: "primary",
+          action_id: ACTION_ASSISTANT_CONFIRM,
+          value,
+        },
+        {
+          type: "button",
+          text: { type: "plain_text", text: "Cancel" },
+          action_id: ACTION_ASSISTANT_DISMISS,
+          value,
+        },
+      ],
+    },
+  ];
+}
+
 export function welcomeBlocks(): KnownBlock[] {
   return [
     {

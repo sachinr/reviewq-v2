@@ -229,6 +229,45 @@ describe("assistantService", () => {
     ]);
   });
 
+  it("handleUserMessageWithTools persists user+reply and passes proposals through", async () => {
+    const store = new FakeAssistantStore();
+    const seen: TurnView[][] = [];
+    // A tool responder: returns reply text plus deferred mutation proposals (opaque
+    // to the service — it just threads them back to the caller for confirmation UI).
+    const responder = {
+      async respond(history: TurnView[], _latest: string) {
+        seen.push(history);
+        return { text: "Queued that for your confirmation.", proposals: [{ toolName: "complete_item", input: { itemId: "i1" } }] };
+      },
+    };
+    const svc = createAssistantService({ store, responder: createCannedResponder() });
+
+    const { reply, proposals } = await svc.handleUserMessageWithTools(INPUT, "mark i1 done", NOW, responder);
+
+    expect(reply).toBe("Queued that for your confirmation.");
+    expect(proposals).toEqual([{ toolName: "complete_item", input: { itemId: "i1" } }]);
+    // Only the user text and final reply are durable — no raw tool blocks persisted.
+    expect(store.messages.map((m) => [m.role, m.content])).toEqual([
+      ["user", "mark i1 done"],
+      ["assistant", "Queued that for your confirmation."],
+    ]);
+    // The responder saw the full (windowed) history, its just-persisted user turn included.
+    expect(seen[0].map((t) => t.content)).toEqual(["mark i1 done"]);
+  });
+
+  it("handleUserMessageWithTools falls back to a safe reply when the responder returns empty text", async () => {
+    const store = new FakeAssistantStore();
+    const responder = {
+      async respond() {
+        return { text: "   ", proposals: [] as unknown[] };
+      },
+    };
+    const svc = createAssistantService({ store, responder: createCannedResponder() });
+
+    const { reply } = await svc.handleUserMessageWithTools(INPUT, "hi", NOW, responder);
+    expect(reply).toBe(ASSISTANT_FALLBACK_REPLY);
+  });
+
   it("startThread records the context channel", async () => {
     const store = new FakeAssistantStore();
     const svc = createAssistantService({ store, responder: createCannedResponder() });

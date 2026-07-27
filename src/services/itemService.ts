@@ -188,6 +188,20 @@ export function createItemService({ repo, slack, notifier }: ItemServiceDeps) {
   }
 
   /**
+   * Load an item by id only if it belongs to `channel`; null otherwise. The
+   * assistant's confirmation flow uses this to (a) render a card that shows the
+   * item's real text and (b) refuse a proposal whose itemId — possibly fabricated
+   * from injected message content — points at another channel. It reuses the same
+   * ownership predicate assertOwnership enforces on the mutating path.
+   */
+  async function findItemInChannel(itemId: string, channel: ChannelContext): Promise<Item | null> {
+    const item = await repo.findById(itemId);
+    if (!item) return null;
+    if (item.channelId !== channel.id || item.workspaceId !== channel.workspaceId) return null;
+    return item;
+  }
+
+  /**
    * Open-item counts for a set of channels, for the App Home overview. Channels
    * with no open items are simply absent from the result (callers default to 0).
    */
@@ -233,6 +247,7 @@ export function createItemService({ repo, slack, notifier }: ItemServiceDeps) {
     completeItemByMessageTs,
     undoComplete,
     listOpenItems,
+    findItemInChannel,
     openAndRecentlyClosedItems,
     openCountsByChannels,
     openClarificationCountsByChannels,

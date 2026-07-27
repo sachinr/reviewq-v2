@@ -1,5 +1,6 @@
 import {
   ASSISTANT_TOOLS,
+  createChannelReadAccess,
   executeToolCall,
   executeToolPlan,
   type ToolCall,
@@ -112,5 +113,100 @@ describe("assistantTools executor — mutation containment", () => {
     const calls: ToolCall[] = mutating.map((t) => ({ name: t.name, input: { itemId: "x" } }));
     const outcomes = await executeToolPlan(calls, ctx);
     expect(outcomes.every((o) => o.status !== "ok")).toBe(true);
+  });
+});
+
+describe("createChannelReadAccess — cross-channel read boundary", () => {
+  const legal: ChannelContext = { ...channel };
+  const finance: ChannelContext = { ...channel, id: "chan_fin", slackChannelId: "C_FINANCE" };
+  const secret: ChannelContext = { ...channel, id: "chan_secret", slackChannelId: "C_SECRET" };
+
+  it("admits and resolves the in-context channel without calling resolveOther", async () => {
+    let resolveOtherCalls = 0;
+    const access = createChannelReadAccess({
+      contextChannelId: "C_LEGAL",
+      contextChannel: legal,
+      memberChannelIds: [], // no user token: only the in-context channel is known
+      resolveOther: async () => {
+        resolveOtherCalls += 1;
+        return null;
+      },
+    });
+
+    expect(access.canAccessChannel("C_LEGAL")).toBe(true);
+    expect(await access.resolveChannel("C_LEGAL")).toBe(legal);
+    expect(resolveOtherCalls).toBe(0); // served from the seeded context channel
+  });
+
+  it("admits a channel the user is a member of and resolves it via resolveOther, caching the result", async () => {
+    let resolveOtherCalls = 0;
+    const access = createChannelReadAccess({
+      contextChannelId: "C_LEGAL",
+      contextChannel: legal,
+      memberChannelIds: ["C_LEGAL", "C_FINANCE"],
+      resolveOther: async (id) => {
+        resolveOtherCalls += 1;
+        return id === "C_FINANCE" ? finance : null;
+      },
+    });
+
+    expect(access.canAccessChannel("C_FINANCE")).toBe(true);
+    expect(await access.resolveChannel("C_FINANCE")).toBe(finance);
+    expect(await access.resolveChannel("C_FINANCE")).toBe(finance); // second call
+    expect(resolveOtherCalls).toBe(1); // resolved once, then cached
+  });
+
+  it("refuses a channel the user is not a member of — and never resolves it", async () => {
+    let resolveOtherCalls = 0;
+    const access = createChannelReadAccess({
+      contextChannelId: "C_LEGAL",
+      contextChannel: legal,
+      memberChannelIds: ["C_LEGAL"],
+      resolveOther: async () => {
+        resolveOtherCalls += 1;
+        return secret; // even if the resolver *could* find it, access must gate first
+      },
+    });
+
+    expect(access.canAccessChannel("C_SECRET")).toBe(false);
+    expect(await access.resolveChannel("C_SECRET")).toBeNull();
+    expect(resolveOtherCalls).toBe(0); // boundary short-circuits before any resolve
+  });
+
+  it("keeps the in-context channel readable even with no membership set (no user token)", async () => {
+    const access = createChannelReadAccess({
+      contextChannelId: "C_LEGAL",
+      contextChannel: legal,
+      resolveOther: async () => null,
+    });
+    expect(access.canAccessChannel("C_LEGAL")).toBe(true);
+    expect(access.canAccessChannel("C_FINANCE")).toBe(false);
+  });
+
+  it("plugs into the executor: a member channel read succeeds, a non-member read is refused", async () => {
+    const repo = new FakeItemRepository();
+    repo.seed(makeItem({ id: "f1", channelId: "chan_fin", status: "open", messageText: "audit" }));
+    const items = createItemService({ repo, slack: new FakeSlackGateway() });
+    const access = createChannelReadAccess({
+      contextChannelId: "C_LEGAL",
+      contextChannel: legal,
+      memberChannelIds: ["C_LEGAL", "C_FINANCE"],
+      resolveOther: async (id) => (id === "C_FINANCE" ? finance : null),
+    });
+    const ctx: ToolExecContext = {
+      workspaceId: "ws_1",
+      requestingSlackId: "U_REQ",
+      canAccessChannel: access.canAccessChannel,
+      resolveChannel: access.resolveChannel,
+      items,
+    };
+
+    const ok = await executeToolCall({ name: "list_open_items", input: { channelId: "C_FINANCE" } }, ctx);
+    expect(ok.status).toBe("ok");
+    if (ok.status !== "ok") throw new Error("unreachable");
+    expect((ok.result as { items: Array<{ id: string }> }).items.map((i) => i.id)).toEqual(["f1"]);
+
+    const refused = await executeToolCall({ name: "list_open_items", input: { channelId: "C_SECRET" } }, ctx);
+    expect(refused.status).toBe("refused");
   });
 });

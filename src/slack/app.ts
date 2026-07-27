@@ -26,11 +26,16 @@ import { createAnthropicResponder } from "../services/anthropicResponder";
 import { createAnthropicChat } from "./anthropicChat";
 import { createAnthropicToolChat } from "./anthropicToolChat";
 import {
-  createToolResponder,
+  createStreamingToolResponder,
   defaultToolSystemPrompt,
+  type StreamingToolCallingChat,
   type ToolCallingChat,
 } from "../services/toolLoop";
-import type { MutationProposal, ToolExecContext } from "../services/assistantTools";
+import {
+  createChannelReadAccess,
+  type MutationProposal,
+  type ToolExecContext,
+} from "../services/assistantTools";
 import type { ItemService } from "../services/itemService";
 import { createResolver } from "./resolver";
 import { SlackClient } from "./slackClient";
@@ -81,7 +86,7 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
   // canned/streaming path above. The Anthropic client is built once here; the
   // per-request executor context (identity + channel access) is assembled in the
   // userMessage handler.
-  const toolChat: ToolCallingChat | null = config.anthropicApiKey
+  const toolChat: (ToolCallingChat & StreamingToolCallingChat) | null = config.anthropicApiKey
     ? createAnthropicToolChat(config.anthropicApiKey)
     : null;
 
@@ -133,6 +138,24 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       resolver: createResolver({ store: workspaceStore, slack }),
       items: createItemService({ repo: itemRepo, slack, notifier }),
     };
+  }
+
+  // The requesting user's real channel membership, for the assistant's
+  // cross-channel read boundary. Best-effort: a user who never granted a user
+  // token (or a transient Slack failure) simply yields undefined, and the
+  // assistant falls back to the in-context channel only. Never throws into the
+  // turn — a failure to widen access must not break the reply.
+  async function safeMemberChannelIds(
+    userTokenEncrypted: string | null,
+  ): Promise<Set<string> | undefined> {
+    if (!userTokenEncrypted) return undefined;
+    try {
+      return await listUserMemberChannelIds(cipher.decrypt(userTokenEncrypted));
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("failed to list requesting user's channels for assistant reads", err);
+      return undefined;
+    }
   }
 
   // --- Slash command: show the channel's queue ---------------------------------
@@ -681,26 +704,35 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       try {
         if (toolChat) {
           // --- Tool-calling path -------------------------------------------------
-          // Scope the assistant's reads to the channel this thread is *about* (the
-          // one the user opened it from). That single membership fact — the user is
-          // demonstrably in the channel they invoked the assistant from — is the
-          // authorization boundary here, so we don't need a per-turn user-token
-          // round-trip: any other channel is simply not accessible to the executor.
+          // The channel this thread is *about* (the one the user opened it from) is
+          // always readable — the user is demonstrably a member, so it needs no
+          // user-token round-trip. Cross-channel reads ("what's stuck in #legal")
+          // are additionally gated on the user's REAL Slack membership, sourced
+          // from their own stored token exactly as App Home does; without a token
+          // we degrade to the in-context channel only.
           const threadCtx = await safeGetThreadContext(getThreadContext);
           const contextChannelId = threadCtx?.channel_id;
           const contextChannel = contextChannelId
             ? await resolver.resolveChannel(workspace, contextChannelId)
             : null;
+          const memberChannelIds = await safeMemberChannelIds(appUser.userTokenEncrypted);
 
+          const access = createChannelReadAccess({
+            contextChannelId,
+            contextChannel,
+            memberChannelIds,
+            resolveOther: (id) => resolver.resolveChannel(workspace, id),
+          });
           const execCtx: ToolExecContext = {
             workspaceId: workspace.id,
             requestingSlackId: m.user,
-            canAccessChannel: (id) => id === contextChannelId,
-            resolveChannel: async (id) => (id === contextChannelId ? contextChannel : null),
+            canAccessChannel: access.canAccessChannel,
+            resolveChannel: access.resolveChannel,
             items,
           };
           const system = defaultToolSystemPrompt(config.appName, { currentChannelId: contextChannelId });
-          const responder = createToolResponder(toolChat, execCtx, system);
+          // Stream the loop's final turn token-by-token into the live sink.
+          const responder = createStreamingToolResponder(toolChat, execCtx, system, sink);
 
           const { reply, proposals } = await assistantSvc.handleUserMessageWithTools(
             input,
@@ -708,12 +740,16 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
             new Date(),
             responder,
           );
-          await renderReply(sink, say, reply);
+          // The responder already streamed the reply into the sink; only cover the
+          // empty-stream case (no text) so the user still sees the safe fallback.
+          if (!sink.started) await say(reply);
 
           // Turn each deferred mutation into a trusted confirmation card — but only
           // for an item that really belongs to the in-context channel and is in the
           // right state. A fabricated/cross-channel itemId (e.g. from injected
           // content) resolves to nothing here and silently produces no card.
+          // (Cross-channel mutations stay out of scope for now — reads only — so a
+          // proposal for another channel's item simply yields no card.)
           if (contextChannel) {
             for (const p of proposals) {
               await maybePostConfirmation(say, items, contextChannel, p);
@@ -772,21 +808,6 @@ async function safeGetThreadContext(
   } catch {
     return undefined;
   }
-}
-
-/**
- * Render an assembled reply through the live stream sink (single append + stop),
- * falling back to a plain post if nothing streamed (e.g. an empty reply so the
- * stream never opened) so the user always sees something.
- */
-async function renderReply(
-  sink: { append(text: string): Promise<void>; stop(): Promise<void>; readonly started: boolean },
-  say: SayLike,
-  reply: string,
-): Promise<void> {
-  if (reply.length > 0) await sink.append(reply);
-  await sink.stop();
-  if (!sink.started) await say({ text: reply });
 }
 
 /**

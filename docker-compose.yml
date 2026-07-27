@@ -1,0 +1,73 @@
+# Local development / smoke-testing stack. NOT a production deployment — prod uses
+# a PaaS (Fly/Render) with managed Postgres + Redis and the Dockerfile's two
+# process roles (see README "Deployment"). This brings up Postgres, Redis, the web
+# process, and the worker together so you can exercise the app end-to-end locally.
+#
+#   cp .env.example .env         # fill in Slack creds + TOKEN_ENCRYPTION_KEY (+ ANTHROPIC_API_KEY)
+#   docker compose up --build    # starts db, redis, web (:3000), worker
+#   docker compose run --rm web npm run migrate:deploy   # apply migrations (first run)
+#
+# Slack still needs a public HTTPS URL to reach the web process — point a tunnel
+# (ngrok / cloudflared) at localhost:3000 and set the app's Request/Redirect URLs
+# to it. DATABASE_URL and REDIS_URL below intentionally override any values in
+# .env so they target the compose network, not your host.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: reviewed
+      POSTGRES_PASSWORD: reviewed
+      POSTGRES_DB: reviewed
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reviewed"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    command: npm start
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://reviewed:reviewed@db:5432/reviewed
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: npm run start:worker
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://reviewed:reviewed@db:5432/reviewed
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  db-data:

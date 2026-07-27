@@ -53,18 +53,35 @@ Slack ──▶ Bolt listeners (src/slack/app.ts)
 
 ## Running locally
 
+Fastest path — everything (Postgres, Redis, web, worker) via Docker Compose:
+
+```bash
+cp .env.example .env            # fill in Slack creds + TOKEN_ENCRYPTION_KEY (+ ANTHROPIC_API_KEY)
+docker compose up --build       # db, redis, web (:3000), worker
+docker compose run --rm web npm run migrate:deploy   # apply migrations (first run only)
+```
+
+Compose overrides `DATABASE_URL`/`REDIS_URL` to the compose network, so you don't
+provision anything. It's a **dev/smoke-test** stack, not the production path (prod
+is a PaaS + managed data stores — see Deployment).
+
+Prefer running against your own Postgres/Redis instead:
+
 ```bash
 npm install
 cp .env.example .env            # fill in Slack creds + generate TOKEN_ENCRYPTION_KEY
 npx prisma migrate deploy       # apply prisma/migrations to your Postgres
 npm run dev                     # web: ts-node-dev, http://localhost:3000
-npm run start:worker            # worker: drains the notification-jobs queue (needs Redis)
+npm run start:worker            # worker: drains the notification/triage/digest queues (needs Redis)
 ```
 
 The **web** process acks Slack and enqueues outbound notifications; the
 **worker** process delivers them with retry/backoff. Both share one image and one
 Postgres/Redis — run the worker whenever you exercise completions so the author
 DM actually goes out.
+
+To reach Slack, point a tunnel (ngrok / cloudflared) at `localhost:3000` and set
+the app's Request/Redirect URLs to it.
 
 Point your Slack app's Redirect URL at `…/slack/oauth_redirect` and its Request
 URL at `…/slack/events` (Bolt's HTTPReceiver mounts both). Install via

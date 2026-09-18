@@ -67,5 +67,15 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # `tsc --noEmit` above typechecks src + test but emits nothing, so it can
+      # not catch an outDir/rootDir layout that puts the entrypoints somewhere
+      # other than where package.json's start scripts (and the Procfile and the
+      # Dockerfile CMD) look for them. Build for real and assert both paths.
+      - name: Build and verify entrypoints
+        run: |
+          npm run build
+          test -f dist/index.js || { echo "::error::dist/index.js missing — npm start would fail"; exit 1; }
+          test -f dist/jobs/worker.js || { echo "::error::dist/jobs/worker.js missing — npm run start:worker would fail"; exit 1; }
+
       - name: Test (unit + DATABASE_URL/REDIS_URL integration suites)
         run: npm test

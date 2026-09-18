@@ -1,0 +1,13 @@
+{
+  // Build-only config. The base tsconfig includes test/ so `tsc --noEmit`
+  // typechecks the suite, which forces rootDir to "." and would emit
+  // dist/src/... — one level deeper than package.json's main/start scripts
+  // (and the Procfile and Dockerfile CMD) expect. The build compiles src/
+  // alone, rooted at src/, so `npm start` finds dist/index.js.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

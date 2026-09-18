@@ -763,6 +763,16 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       } finally {
         // Idempotent: closes a half-open stream if generation threw mid-flight.
         await sink.stop();
+        // Clear the thinking indicator explicitly. Under the legacy assistant
+        // surface posting a message cleared it implicitly, but Slack's agent
+        // messaging compatibility bridge no longer does — an empty status is
+        // what moves the session back to `active`. Best-effort: a failed clear
+        // must not throw over a reply we already delivered.
+        try {
+          await setStatus("");
+        } catch {
+          // status is cosmetic; the reply already landed.
+        }
       }
     },
   });

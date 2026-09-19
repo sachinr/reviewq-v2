@@ -126,6 +126,8 @@ export function helpBlocks(appName: string): KnownBlock[] {
       text: {
         type: "mrkdwn",
         text:
+          "• *Just ask me* — mention me and say what you want in plain English: " +
+          "_track this one_, _what's still open?_, _that's handled now_. No command words to remember.\n" +
           "• *Add an item* — open the message ⋮ menu on any message and choose _Add to review queue_.\n" +
           "• *See the queue* — run the slash command in a channel, or open the App Home tab.\n" +
           "• *Complete an item* — hit *Mark as Done*. The original author gets a heads-up, and you have a minute to *Undo*.\n" +

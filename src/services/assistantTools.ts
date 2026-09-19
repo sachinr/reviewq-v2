@@ -24,16 +24,28 @@
 // outcomes are the next step; the guardrails they rely on are proven first.
 
 import type { Item } from "@prisma/client";
-import type { ChannelContext } from "./ports";
+import type { ChannelContext, SourceMessage } from "./ports";
 import type { ItemService } from "./itemService";
 
-export type AssistantToolName = "list_open_items" | "complete_item" | "undo_complete";
+export type AssistantToolName =
+  | "list_open_items"
+  | "add_item"
+  | "complete_item"
+  | "undo_complete";
 
 export interface AssistantTool {
   name: AssistantToolName;
   description: string;
-  /** True for tools that change queue state — these are never auto-executed. */
+  /** True for tools that change queue state. */
   mutating: boolean;
+  /**
+   * True for mutating tools that must be approved through trusted UI before they
+   * run. `add_item` is the deliberate exception: it can only ever flag a message
+   * the Slack event itself put in context (never one the model named), so there
+   * is nothing for injected text to steer. Completions and reopens act on an
+   * itemId the model chose while reading untrusted content, so they still defer.
+   */
+  requiresConfirmation: boolean;
   input_schema: {
     type: "object";
     additionalProperties: false;
@@ -54,6 +66,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
       "List the open review items in a channel the requesting user belongs to. " +
       "Use only for channels the user is a member of; requests for other channels are refused.",
     mutating: false,
+    requiresConfirmation: false,
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -64,12 +77,29 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
     },
   },
   {
+    name: "add_item",
+    description:
+      "Add the Slack message currently in context to this channel's review queue. " +
+      "Use this whenever the user asks to track, add, queue, flag, or save something — " +
+      "it takes no arguments because the message being added is always the one the " +
+      "user is replying to (or their own message), never one you name or quote.",
+    mutating: true,
+    requiresConfirmation: false,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+      required: [],
+    },
+  },
+  {
     name: "complete_item",
     description:
       "Propose marking a review item done. This never completes it directly — it " +
       "returns a confirmation the requesting user must approve, because message " +
       "content is untrusted and completions are permission-checked.",
     mutating: true,
+    requiresConfirmation: true,
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -85,6 +115,7 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
       "Propose undoing a recent completion. Like complete_item, this only returns a " +
       "confirmation for the requesting user to approve; it never mutates directly.",
     mutating: true,
+    requiresConfirmation: true,
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -118,7 +149,9 @@ export interface MutationProposal {
  * - `needs_confirmation`: a mutating call, never auto-run; carries the proposal
  *   the trusted UI must have the user approve before anything changes.
  *
- * Invariant the tests pin: a mutating tool NEVER yields `ok`.
+ * Invariant the tests pin: a mutating tool with `requiresConfirmation` NEVER
+ * yields `ok`. (`add_item` mutates but is confirmation-free — safe only because
+ * its subject comes from the Slack event, not from model output.)
  */
 export type ToolOutcome =
   | { status: "ok"; toolName: string; result: unknown }
@@ -137,7 +170,24 @@ export interface ToolExecContext {
   canAccessChannel(slackChannelId: string): boolean | Promise<boolean>;
   /** Resolve a Slack channel id to its internal context; null when unknown. */
   resolveChannel(slackChannelId: string): Promise<ChannelContext | null>;
-  items: Pick<ItemService, "listOpenItems">;
+  /**
+   * The channel this turn happened in. `add_item` is scoped to it exclusively —
+   * you can only ever add to the queue you're talking in.
+   */
+  contextChannelId?: string | null;
+  /**
+   * The message `add_item` would flag, resolved from the Slack event before the
+   * model ran: the thread parent when the user mentioned us in a thread, else
+   * their own message. Absent (and add_item refused) when there is nothing
+   * sensible to add — e.g. an assistant-pane turn with no channel message.
+   *
+   * This is the whole reason add_item can skip confirmation: the model chooses
+   * *whether* to add, never *what*.
+   */
+  focusedSource?: SourceMessage | null;
+  /** Internal id of the requesting user, recorded as the item's flagger. */
+  flaggedByUserId?: string | null;
+  items: Pick<ItemService, "listOpenItems"> & Partial<Pick<ItemService, "createItem">>;
 }
 
 /** A single item, flattened to the read-only fields the assistant may surface. */
@@ -168,7 +218,11 @@ export async function executeToolCall(call: ToolCall, ctx: ToolExecContext): Pro
     return { status: "refused", toolName: call.name, reason: `Unknown tool: ${call.name}` };
   }
 
-  if (tool.mutating) {
+  if (tool.name === "add_item") {
+    return executeAdd(tool, ctx);
+  }
+
+  if (tool.requiresConfirmation) {
     // Containment: a mutating call — whatever prompted it, real request or quoted
     // injection — is turned into a proposal, never executed from model output.
     const itemId = asString(call.input.itemId);
@@ -200,6 +254,64 @@ export async function executeToolCall(call: ToolCall, ctx: ToolExecContext): Pro
   }
   const items = await ctx.items.listOpenItems(channel);
   return { status: "ok", toolName: tool.name, result: { items: items.map(toItemView) } };
+}
+
+/**
+ * Run `add_item`. Unlike the other mutating tools this executes directly, and the
+ * reason it can is structural rather than a matter of trust in the model: every
+ * input comes from the Slack event (which channel, which message, which user),
+ * so the model's only influence is *whether* an add happens. The worst an
+ * injected "add this to the queue" can achieve is flagging the very message the
+ * user was already pointing at — the same thing the Add-to-queue message action
+ * does in one click.
+ *
+ * Still fully bounded: the add targets the in-context channel only, that channel
+ * must pass the same membership check reads do, and it must resolve to a real
+ * row before itemService is touched.
+ */
+async function executeAdd(tool: AssistantTool, ctx: ToolExecContext): Promise<ToolOutcome> {
+  const source = ctx.focusedSource;
+  if (!source) {
+    return {
+      status: "refused",
+      toolName: tool.name,
+      reason: "there is no message in context to add",
+    };
+  }
+  if (!ctx.flaggedByUserId) {
+    return { status: "refused", toolName: tool.name, reason: "no requesting user to attribute" };
+  }
+  if (!ctx.items.createItem) {
+    return { status: "refused", toolName: tool.name, reason: "adding is not available here" };
+  }
+  const channelId = ctx.contextChannelId;
+  if (!channelId) {
+    return { status: "refused", toolName: tool.name, reason: "no channel in context to add to" };
+  }
+  if (!(await ctx.canAccessChannel(channelId))) {
+    return {
+      status: "refused",
+      toolName: tool.name,
+      reason: `requesting user is not a member of ${channelId}`,
+    };
+  }
+  const channel = await ctx.resolveChannel(channelId);
+  if (!channel) {
+    return { status: "refused", toolName: tool.name, reason: `unknown channel ${channelId}` };
+  }
+
+  const res = await ctx.items.createItem(channel, source, ctx.flaggedByUserId);
+  return {
+    status: "ok",
+    toolName: tool.name,
+    result: {
+      item: toItemView(res.item),
+      // Surfaced so the model can say "that was already on the list" instead of
+      // reporting a fresh add — createItem is idempotent per (channel, message).
+      wasDuplicate: res.wasDuplicate,
+      wasReopened: res.wasReopened,
+    },
+  };
 }
 
 /** Run a plan of tool calls in order under the same guardrails. */

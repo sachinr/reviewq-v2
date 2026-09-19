@@ -27,6 +27,7 @@ import { createAnthropicChat } from "./anthropicChat";
 import { createAnthropicToolChat } from "./anthropicToolChat";
 import {
   createStreamingToolResponder,
+  createToolResponder,
   defaultToolSystemPrompt,
   type StreamingToolCallingChat,
   type ToolCallingChat,
@@ -405,7 +406,116 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
     });
   });
 
-  // Channel mentions: `@bot add/done/list/help`.
+  // Channel mentions, the smart path. `parseBotCommand`'s verb grammar is still
+  // here — it is the no-API-key fallback, and the safety net if a turn throws —
+  // but when the agent is configured a mention is just a request in plain English:
+  // "what's still open", "track this one", "that's handled now". Intent is the
+  // model's job; what may actually happen is still the executor's.
+  //
+  // Returns false when it declined to handle the mention, so the caller can fall
+  // through to the classic parser rather than leaving the user with silence.
+  async function handleMentionWithAgent(
+    client: unknown,
+    teamId: string | undefined,
+    ctx: TextCtx,
+  ): Promise<boolean> {
+    if (!toolChat || !teamId || !ctx.text || !ctx.userSlackId) return false;
+
+    const { resolver, items, slack } = scopeFor(client);
+    const workspace = await resolver.resolveWorkspace(teamId);
+    if (!workspace) return false;
+    if (ctx.userSlackId === workspace.botUserId) return true; // never answer ourselves
+
+    // What the user actually said, minus the @-mention that addressed us.
+    const request = stripBotMention(ctx.text, workspace.botUserId);
+    if (!request) {
+      // A bare "@bot" with nothing after it. There's no intent to infer, and
+      // silence is the one response an agent shouldn't give — answer with help
+      // directly rather than spending a model turn on it.
+      await postInThread(client, ctx.channelId, ctx.threadTs ?? ctx.ts, {
+        text: "Here's how I work",
+        blocks: helpBlocks(config.appName),
+      });
+      return true;
+    }
+
+    const channel = await resolver.resolveChannel(workspace, ctx.channelId);
+    const appUser = await resolver.resolveUser(workspace, ctx.userSlackId);
+    const threadTs = ctx.threadTs ?? ctx.ts;
+
+    // The message an add would flag, decided here rather than by the model: the
+    // parent when they mentioned us in a thread, otherwise their own message.
+    // Same rule the classic `@bot add` thread idiom uses.
+    const focusedSource: SourceMessage | null =
+      ctx.threadTs && ctx.threadTs !== ctx.ts
+        ? await sourceFromParent(slack, resolver, workspace, channel.slackChannelId, ctx.threadTs)
+        : {
+            slackMessageTs: ctx.ts,
+            slackThreadTs: ctx.threadTs ?? null,
+            messageText: request,
+            authorSlackId: ctx.userSlackId,
+            authorUserId: appUser.id,
+            filesJson: null,
+          };
+
+    const memberChannelIds = await safeMemberChannelIds(appUser.userTokenEncrypted);
+    const access = createChannelReadAccess({
+      contextChannelId: ctx.channelId,
+      contextChannel: channel,
+      memberChannelIds,
+      resolveOther: (id) => resolver.resolveChannel(workspace, id),
+    });
+
+    const execCtx: ToolExecContext = {
+      workspaceId: workspace.id,
+      requestingSlackId: ctx.userSlackId,
+      canAccessChannel: access.canAccessChannel,
+      resolveChannel: access.resolveChannel,
+      contextChannelId: ctx.channelId,
+      focusedSource,
+      flaggedByUserId: appUser.id,
+      items: {
+        listOpenItems: items.listOpenItems,
+        // Wrap the add so an agent-created item gets triaged exactly like one
+        // added via the message action or `@bot add`. Keeping this here (rather
+        // than in assistantTools) leaves the executor free of queue plumbing.
+        createItem: async (ch, source, flaggedBy) => {
+          const res = await items.createItem(ch, source, flaggedBy);
+          if (!res.wasDuplicate) await enqueueTriage(workspace.id, res.item.id);
+          return res;
+        },
+      },
+    };
+
+    const system = defaultToolSystemPrompt(config.appName, { currentChannelId: ctx.channelId });
+    const responder = createToolResponder(toolChat, execCtx, system);
+
+    // Replies land as real threaded messages, not ephemerals: the conversation
+    // has to be readable afterwards, and a confirmation card has to still be
+    // there to click. Persisted per (channel, thread) so a follow-up like
+    // "yes, that one" has the previous turns to work from.
+    const { reply: replyText, proposals } = await assistantSvc.handleUserMessageWithTools(
+      {
+        workspaceId: workspace.id,
+        appUserId: appUser.id,
+        slackChannelId: ctx.channelId,
+        slackThreadTs: threadTs,
+      },
+      request,
+      new Date(),
+      responder,
+    );
+
+    const say: SayLike = (msg) => postInThread(client, ctx.channelId, threadTs, msg);
+    await say({ text: replyText });
+    for (const p of proposals) {
+      await maybePostConfirmation(say, items, channel, p);
+    }
+    return true;
+  }
+
+  // Channel mentions: plain-English requests via the agent, falling back to the
+  // classic `@bot add/done/list/help` grammar when there's no key or a turn fails.
   app.event("app_mention", async ({ event, context, client }) => {
     const e = event as {
       text?: string;
@@ -415,14 +525,23 @@ export function createApp({ prisma, cipher, config }: AppDeps): App {
       thread_ts?: string;
     };
     if (!e.text || !e.user || !e.channel || !e.ts) return;
-    await handleTextCommand(client, context.teamId, {
+    const ctx: TextCtx = {
       text: e.text,
       userSlackId: e.user,
       channelId: e.channel,
       ts: e.ts,
       threadTs: e.thread_ts,
       isDM: e.channel.startsWith("D"),
-    });
+    };
+    try {
+      if (await handleMentionWithAgent(client, context.teamId, ctx)) return;
+    } catch (err) {
+      // A model/API failure must not turn a mention into silence — fall through
+      // to the deterministic parser, which still understands the classic verbs.
+      // eslint-disable-next-line no-console
+      console.error("mention agent failed; falling back to the command parser", err);
+    }
+    await handleTextCommand(client, context.teamId, ctx);
   });
 
   // --- Block actions: complete / undo / paginate -------------------------------
@@ -797,6 +916,41 @@ async function listUserMemberChannelIds(userToken: string): Promise<Set<string>>
 
 /** A minimal say() shape — enough to post text and optional blocks into the thread. */
 type SayLike = (msg: { text: string; blocks?: unknown[] }) => Promise<unknown>;
+
+/**
+ * The user's request with the @-mention that addressed us removed (any position,
+ * since people write "hey <@U1> add this" as readily as "<@U1> add this"). Other
+ * users' and channels' mentions are deliberately left intact — the model needs
+ * `<#C0123|legal>` to resolve "what's stuck in #legal" to an id.
+ */
+function stripBotMention(rawText: string, botUserId: string): string {
+  return (rawText ?? "")
+    .replace(new RegExp(`<@${botUserId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}>`, "gi"), " ")
+    .trim();
+}
+
+/** Post a message into a thread, tolerating a client that rejects (never throws). */
+async function postInThread(
+  client: unknown,
+  channel: string,
+  threadTs: string,
+  msg: { text: string; blocks?: unknown[] },
+): Promise<unknown> {
+  try {
+    return await (
+      client as { chat: { postMessage: (a: unknown) => Promise<unknown> } }
+    ).chat.postMessage({
+      channel,
+      thread_ts: threadTs,
+      text: msg.text,
+      ...(msg.blocks ? { blocks: msg.blocks } : {}),
+    });
+  } catch {
+    // e.g. not_in_channel — nothing we can do, and a failed post must not throw
+    // over work the executor already committed.
+    return undefined;
+  }
+}
 
 /** Read the assistant thread's saved context, tolerating an absent/erroring util. */
 async function safeGetThreadContext(

@@ -44,6 +44,13 @@ Slack ──▶ Bolt listeners (src/slack/app.ts)
 - **Buttons** — Mark as Done / Undo (60s window) / paginate, re-rendered in place.
 - **App Home** — the user's queue.
 - **member_joined_channel** — a welcome message when the bot is added.
+- **Channel mentions** — `@bot <anything>` runs the tool-calling agent: plain
+  English ("track this one", "what's still open?", "that's handled now") is
+  mapped to tools by the model, not by a verb grammar. Replies land in-thread.
+  Adds happen immediately (the message being flagged comes from the Slack event,
+  never from model output); completions and reopens surface a confirmation card.
+  Without `ANTHROPIC_API_KEY` — or if a turn throws — it falls back to the
+  classic `@bot add|done|list|help` parser (`slack/messageCommands.ts`).
 - **Assistant** — persists every turn (`AssistantThread`/`AssistantMessage`) so
   context survives across messages; replies via a swappable `Responder`
   (`createAnthropicResponder` when `ANTHROPIC_API_KEY` is set, else the canned
@@ -179,5 +186,8 @@ gate on.
   guarded confirmation UI) ✅; **scheduled staleness digests** — a repeatable
   BullMQ sweep that Claude-summarizes each channel's aging open items and posts a
   digest (`DIGEST_CRON`, default Mondays 14:00 UTC; runs on the worker process). ✅
-- **Next** — cross-channel assistant reads, dynamic suggested prompts, semantic
-  duplicate detection (pgvector); stretch: Workflow Builder steps, MCP exposure.
+- **Phase 3 (cont.)** — natural-language channel mentions: `@bot` routes through
+  the tool loop with an `add_item` tool, falling back to the keyword parser. ✅
+- **Next** — dynamic suggested prompts, natural-language DMs, cross-channel
+  mutations, semantic duplicate detection (pgvector); stretch: Workflow Builder
+  steps, MCP exposure.

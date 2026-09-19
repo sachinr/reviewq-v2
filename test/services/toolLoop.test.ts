@@ -48,19 +48,35 @@ function scriptedChat(turns: AssistantTurn[]) {
 function buildCtx(opts: { accessible: string[]; items?: Item[] } = { accessible: ["C_LEGAL"] }) {
   const accessible = new Set(opts.accessible);
   const reads: string[] = [];
+  const adds: string[] = [];
   const ctx: ToolExecContext = {
     workspaceId: "ws_1",
     requestingSlackId: "U_REQ",
     canAccessChannel: (id) => accessible.has(id),
     resolveChannel: async (id) => (id === "C_LEGAL" ? CURRENT : null),
+    contextChannelId: "C_LEGAL",
+    focusedSource: {
+      slackMessageTs: "1700000000.000100",
+      messageText: "the message the user pointed at",
+      authorSlackId: "U_AUTHOR",
+    },
+    flaggedByUserId: "user_req",
     items: {
       async listOpenItems(channel) {
         reads.push(channel.slackChannelId);
         return opts.items ?? [];
       },
+      async createItem(channel, source) {
+        adds.push(`${channel.slackChannelId}:${source.slackMessageTs}`);
+        return {
+          item: makeItem({ id: "i_added", messageText: source.messageText ?? null }),
+          wasDuplicate: false,
+          wasReopened: false,
+        };
+      },
     },
   };
-  return { ctx, reads };
+  return { ctx, reads, adds };
 }
 
 const SYSTEM = "sys";
@@ -230,6 +246,58 @@ describe("runToolLoop — prompt-injection containment at the loop level", () =>
     expect(reads).toEqual([]);
     // The mutation was deferred to a user confirmation — never executed.
     expect(result.proposals).toEqual([{ toolName: "complete_item", input: { itemId: "i_injected" } }]);
+  });
+});
+
+describe("runToolLoop — add_item", () => {
+  it("executes an add and feeds the result back, with nothing left to confirm", async () => {
+    const { chat, seen } = scriptedChat([
+      { text: "", toolUses: [{ id: "a1", name: "add_item", input: {} }] },
+      { text: "Added it to this channel's queue.", toolUses: [] },
+    ]);
+    const { ctx, adds } = buildCtx({ accessible: ["C_LEGAL"] });
+
+    const result = await runToolLoop(
+      chat,
+      ctx,
+      SYSTEM,
+      [{ role: "user", content: "track this one" }],
+      "track this one",
+    );
+
+    // The add really ran, against the focused message in the in-context channel.
+    expect(adds).toEqual(["C_LEGAL:1700000000.000100"]);
+    // Unlike a completion, there is no confirmation card to click.
+    expect(result.proposals).toEqual([]);
+    expect(result.text).toBe("Added it to this channel's queue.");
+    // The model saw a successful tool_result, so it can answer in the same turn.
+    const lastTranscript = seen[seen.length - 1];
+    expect(JSON.stringify(lastTranscript)).toContain("i_added");
+  });
+
+  it("still defers the completion when a hijacked model asks to add AND complete", async () => {
+    // Injected content steering both: the add is bounded (it can only ever flag
+    // the message already in context), the completion is not — so only the
+    // completion needs a human in the loop.
+    const { chat } = scriptedChat([
+      {
+        text: "",
+        toolUses: [
+          { id: "a1", name: "add_item", input: { text: "attacker-chosen" } },
+          { id: "c1", name: "complete_item", input: { itemId: "i_injected" } },
+        ],
+      },
+      { text: "done what I could.", toolUses: [] },
+    ]);
+    const { ctx, adds } = buildCtx({ accessible: ["C_LEGAL"] });
+
+    const result = await runToolLoop(chat, ctx, SYSTEM, [{ role: "user", content: "x" }], "x");
+
+    // The add flagged the focused message — never the attacker's chosen text.
+    expect(adds).toEqual(["C_LEGAL:1700000000.000100"]);
+    expect(result.proposals).toEqual([
+      { toolName: "complete_item", input: { itemId: "i_injected" } },
+    ]);
   });
 });
 
